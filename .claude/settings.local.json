@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip show:*)",
+      "Bash(pip install:*)",
+      "Bash(python email_otp.py)",
+      "Bash(python -c ':*)",
+      "Bash(python parse_resume.py)",
+      "WebSearch",
+      "WebFetch(domain:www.linkedhelper.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:tonyyoung3.medium.com)",
+      "Bash(python -c \"import linkedin_apply\")",
+      "Bash(python -m py_compile linkedin_apply.py)",
+      "Bash(python -m py_compile external_apply.py)",
+      "Bash(python -m py_compile \"C:\\\\Users\\\\nikhi\\\\OneDrive\\\\Desktop\\\\Ai job filler\\\\linkedin_apply.py\")",
+      "Bash(python -m py_compile \"C:\\\\Users\\\\nikhi\\\\OneDrive\\\\Desktop\\\\Ai job filler\\\\external_apply.py\")"
+    ]
+  }
+}

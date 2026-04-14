@@ -1,0 +1,13 @@
+# Core automation
+playwright
+python-dotenv
+openai
+
+# Backend server
+fastapi
+uvicorn[standard]
+python-multipart
+
+# CV parsing
+doctr[torch]
+pdfplumber
