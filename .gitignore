@@ -19,3 +19,7 @@ jobs_result.json
 *.png
 
 linkedin_browser_profile_*
+
+
+user_data/
+*.pdf
