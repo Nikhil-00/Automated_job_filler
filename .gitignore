@@ -17,3 +17,5 @@ profile.json
 applications_log.json
 jobs_result.json
 *.png
+
+linkedin_browser_profile_*

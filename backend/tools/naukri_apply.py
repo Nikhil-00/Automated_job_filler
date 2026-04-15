@@ -1,6 +1,6 @@
 from playwright.sync_api import sync_playwright
 from dotenv import load_dotenv
-from email_otp import wait_for_otp
+from .email_otp import wait_for_otp
 import time
 import json
 import os
@@ -8,7 +8,7 @@ import os
 load_dotenv()
 
 # Directory where this script lives
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+SCRIPT_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 
 # =============================================
 # CONFIG

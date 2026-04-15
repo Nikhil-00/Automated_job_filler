@@ -43,7 +43,8 @@ def _init(openai_client: OpenAI, track_usage_fn: Callable, logger) -> None:
     _logger        = logger
     # Load resume text
     try:
-        p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resume_text.txt")
+        _PROJECT_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+        p = os.path.join(_PROJECT_ROOT, "resume_text.txt")
         if os.path.exists(p):
             with open(p, encoding="utf-8") as f:
                 _RESUME_TEXT = f.read()

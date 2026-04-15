@@ -14,7 +14,18 @@
       "Bash(python -m py_compile linkedin_apply.py)",
       "Bash(python -m py_compile external_apply.py)",
       "Bash(python -m py_compile \"C:\\\\Users\\\\nikhi\\\\OneDrive\\\\Desktop\\\\Ai job filler\\\\linkedin_apply.py\")",
-      "Bash(python -m py_compile \"C:\\\\Users\\\\nikhi\\\\OneDrive\\\\Desktop\\\\Ai job filler\\\\external_apply.py\")"
+      "Bash(python -m py_compile \"C:\\\\Users\\\\nikhi\\\\OneDrive\\\\Desktop\\\\Ai job filler\\\\external_apply.py\")",
+      "Bash(sed -i 's|^import external_apply as _ext|from . import external_apply as _ext|' \"C:\\\\Users\\\\nikhi\\\\OneDrive\\\\Desktop\\\\Ai job filler\\\\backend\\\\tools\\\\linkedin_apply.py\")",
+      "Bash(sed -i 's|SCRIPT_DIR = os.path.dirname\\(os.path.abspath\\(__file__\\)\\)|SCRIPT_DIR = os.path.normpath\\(os.path.join\\(os.path.dirname\\(os.path.abspath\\(__file__\\)\\), \"..\", \"..\"\\)\\)|' \"C:\\\\Users\\\\nikhi\\\\OneDrive\\\\Desktop\\\\Ai job filler\\\\backend\\\\tools\\\\linkedin_apply.py\")",
+      "Bash(sed -i 's|path = os.path.join\\(os.path.dirname\\(os.path.abspath\\(__file__\\)\\), \"resume_text.txt\"\\)|path = os.path.join\\(os.path.normpath\\(os.path.join\\(os.path.dirname\\(os.path.abspath\\(__file__\\)\\), \"..\", \"..\"\\)\\), \"resume_text.txt\"\\)|' \"C:\\\\Users\\\\nikhi\\\\OneDrive\\\\Desktop\\\\Ai job filler\\\\backend\\\\tools\\\\linkedin_apply.py\")",
+      "Bash(sed -i 's|from email_otp import wait_for_otp|from .email_otp import wait_for_otp|' \"C:\\\\Users\\\\nikhi\\\\OneDrive\\\\Desktop\\\\Ai job filler\\\\backend\\\\tools\\\\naukri_apply.py\")",
+      "Bash(sed -i 's|SCRIPT_DIR = os.path.dirname\\(os.path.abspath\\(__file__\\)\\)|SCRIPT_DIR = os.path.normpath\\(os.path.join\\(os.path.dirname\\(os.path.abspath\\(__file__\\)\\), \"..\", \"..\"\\)\\)|' \"C:\\\\Users\\\\nikhi\\\\OneDrive\\\\Desktop\\\\Ai job filler\\\\backend\\\\tools\\\\naukri_apply.py\")",
+      "Bash(.venv/Scripts/pip install:*)",
+      "Bash(\"C:\\\\Users\\\\nikhi\\\\OneDrive\\\\Desktop\\\\Ai job:*)",
+      "Bash(py --version)",
+      "Bash(python3 -m pip install mysql-connector-python bcrypt PyJWT)",
+      "Bash(uv pip:*)",
+      "Bash(xargs grep *)"
     ]
   }
 }

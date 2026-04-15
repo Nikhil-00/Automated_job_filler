@@ -9,5 +9,9 @@ uvicorn[standard]
 python-multipart
 
 # CV parsing
-doctr[torch]
 pdfplumber
+
+# Auth
+mysql-connector-python
+bcrypt
+PyJWT

@@ -1,0 +1,60 @@
+NIKHIL PANDEY
+Delhi, India | nikhilpandey4000@gmail.com | +91 9871318546 | [Portfolio] | [Linkedin] | [Github]
+Motivated and tech-driven fresher with hands-on project experience in AI-powered chatbots, BI analytics, OCR, and machine learning systems.
+Proficient in Machine Learning, Deep Learning, Natural Language Processing, Generative AI, and Software Development. Eager to leverage
+cutting-edge technologies to build intelligent, scalable, and user-centric data-driven solutions. Known for being a fast learner, effective collaborator,
+and strong problem-solver with a deep passion for innovation, real-world applications, and continuous learning in the rapidly evolving field of
+artificial intelligence.
+Education
+BTECH (AI&DS) 2022-2026 Dr. Akhilesh Das Gupta Institute of Professional Studies CGPA 8.86*
+CLASS 12th 2020-2021 Kendriya Vidyalaya CRPF 86 %
+CLASS 10th 2018-2019 Kendriya Vidyalaya CRPF 75 %
+Professional Experie nce
+MRIKAL Data Scientist Intern Jan 2026 - Present
+ Designed and developed an AI-powered chatbot for Apache Superset and Preset dashboards enabling natural language querying.
+ Achieved 90% accuracy on simple dashboards and 82% accuracy on complex dashboards through chatbot performance and evaluation.
+ Implemented dynamic SQL query generation from user inputs, enabling efficient and real-time data retrieval from dashboard systems.
+ Developed an LLM-based intent classification system to accurately route queries between informational, and data extraction tasks.
+INVISIBLE TECHNOLOGIES ML Engineer Specialist – AI Trainer Oct 2025 – Dec 2025
+ Evaluated and solved 90+ problem statements for Meta’s MLEng project.
+ Assessed Plan A vs. Plan B for each workflow task and selected the most feasible, novel, and implementation-ready solution.
+ Analyzed constraints, edge cases, and expected outputs to ensure high-quality reasoning and consistent decision accuracy.
+WESEE (Indian Navy)[Link] Data Scientist Intern July 2025 – Sep 2025
+ Developed an object detection system using YOLOv11n to identify foreign aircraft, submarines, and ships achieving 87% accuracy
+ Built offline OCR RAG system using LLM and Doctr to extract text from PDFs with 94% accuracy
+ Implemented RAG pipeline combining similarity search and Mistral-7B for document-grounded question answering improving
+response time by 40%
+MESHLINTECH [Link] Robotic Intern April 2025 – July 2025
+ Designed a garland-making machine sketch from scratch using Fusion 360 and Blender for detailed 3D modelling and simulation.
+ Optimized the Knot-making mechanism design by refining its components, boosting overall efficiency and performance by 25%.
+ Improved overall machine automation by 40%, reducing human effort in knot tying and enhancing the system’s operational efficiency.
+ACADOSE [Link] Machine Learning Intern June 2024 – Dec 2024
+ Worked on a Price Analysis project to enhance pricing accuracy and increase overall operational efficiency of algorithm by 15%.
+ Improved data quality, visualized patterns using Matplotlib and Seaborn, and applied DBSCAN algorithm to generate data clusters.
+ Enhanced overall efficiency by 15% and enabled easy assignment of desired clusters to new data points using DBSCAN algorithm.
+Academic Projects
+INTERVIEW KING | [GitHub]
+ Built full-stack Interview King platform integrating OCR, embeddings, and intelligent agent for automated resume analysis.
+ Developed React-based interface for resume uploads, ATS visualization, real-time interaction with interview preparation agent.
+ Designed LangGraph-driven AI agent generating questions, evaluating answers, and providing structured actionable feedback.
+Technical Skills
+ Programming Languages: Python, C++, C.
+ Data Analytics: Excel, Power BI, Microsoft Power Point, Apache Superset, Preset
+ Data Science: Machine learning, Deep learning, NLP, Generative AI, RAG, Agentic AI.
+ API: Fast API.
+ Database: MySQL, Postgres
+ Core Subjects: OOPs, Data Structures, DBMS.
+ Robotics: Fusion360, Blender.
+Publication
+ Research Publication — IJEDR (2025) [Link]
+Offline Document Understanding: A Study of OCR, LLMs, and Semantic Retrieval
+Co-authors: P. Sinha, R. Kumar
+Impact Factor: 9.37 | Paper ID: IJEDR2504311
+Achievement (Co-curricular)
+ Grand Finalist at IIT Ropar Predictathon – Achieved 95%+ accuracy in an image classification model.
+ Solved 400+ coding questions on Code Chef and LeetCode, strengthening problem-solving skills [Codechef] | [LeetCode]
+ Secured 7th rank in the entire class during 3rd semester with an SGPAof 9.22.
+Extra-Curricular Activities
+ Represented GGSIPU in the North Zone Inter University Kabaddi Tournament held in November 2024.
+ Secured 1st place in February 2025 and 2nd place in February 2024 out of 20+ teams at the ADGITM Inter Kabaddi Tournament.
+ Secured 3rd place in the 17th All India GGSIPU Badminton Tournament held in December 2022.

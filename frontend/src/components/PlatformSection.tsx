@@ -27,7 +27,7 @@ const PlatformSection = ({ platform, profileData }: PlatformSectionProps) => {
   const [selectedLevels, setSelectedLevels] = useState<string[]>(["Mid-Senior"]);
   const [locationFilter, setLocationFilter] = useState("India");
   const [selectedJobTypes, setSelectedJobTypes] = useState<string[]>(["Full-time"]);
-  const [applyType] = useState<"easy_apply" | "external">("easy_apply");  // external locked for now
+  const [applyType, setApplyType] = useState<"easy_apply" | "external">("easy_apply");  // external locked for now
   const [count, setCount] = useState(10);
 
   const [logs, setLogs]           = useState<LogEntry[]>([]);
@@ -53,9 +53,13 @@ const PlatformSection = ({ platform, profileData }: PlatformSectionProps) => {
 
     try {
       setLoginStatus("logging");
-      const res = await fetch("http://localhost:8000/api/verify-credentials", {
+      const token = localStorage.getItem("auth_token");
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000"}/api/verify-credentials`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type":  "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           email: loginEmail,
           password: loginPassword,

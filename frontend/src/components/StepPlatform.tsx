@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Linkedin, Briefcase, Rocket } from "lucide-react";
+import { Linkedin, Briefcase, Rocket, History } from "lucide-react";
 import PlatformSection from "./PlatformSection";
+import AppliedJobs from "@/pages/AppliedJobs";
+import { ProfileData } from "@/lib/mockApi";
 
 const platforms = [
   {
@@ -30,12 +32,14 @@ const platforms = [
   },
 ];
 
-import { ProfileData } from "@/lib/mockApi";
-
 interface StepPlatformProps { profileData: ProfileData; }
 
+type ActiveView = "linkedin" | "naukri" | "wellfound" | "applied_jobs" | null;
+
 const StepPlatform = ({ profileData }: StepPlatformProps) => {
-  const [selected, setSelected] = useState<"linkedin" | "naukri" | "wellfound" | null>(null);
+  const [selected, setSelected] = useState<ActiveView>(null);
+
+  const toggle = (id: ActiveView) => setSelected((prev) => (prev === id ? null : id));
 
   return (
     <motion.div
@@ -47,7 +51,8 @@ const StepPlatform = ({ profileData }: StepPlatformProps) => {
     >
       <h2 className="text-2xl font-bold text-gradient mb-6 text-center">Choose Job Platform</h2>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+      {/* Platform cards + Applied Jobs button */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
         {platforms.map((p, i) => (
           <motion.div
             key={p.id}
@@ -56,7 +61,7 @@ const StepPlatform = ({ profileData }: StepPlatformProps) => {
             transition={{ delay: i * 0.1 }}
             whileHover={p.enabled ? { scale: 1.03, y: -4 } : {}}
             whileTap={p.enabled ? { scale: 0.98 } : {}}
-            onClick={() => p.enabled && setSelected(selected === p.id ? null : p.id)}
+            onClick={() => p.enabled && toggle(p.id)}
             className={`relative glass-card p-6 text-center cursor-pointer transition-all duration-300 overflow-hidden
               ${!p.enabled ? "opacity-50 cursor-not-allowed" : ""}
               ${selected === p.id ? "ring-2 ring-primary glow-blue" : ""}
@@ -78,11 +83,43 @@ const StepPlatform = ({ profileData }: StepPlatformProps) => {
             )}
           </motion.div>
         ))}
+
+        {/* Applied Jobs card */}
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          whileHover={{ scale: 1.03, y: -4 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={() => toggle("applied_jobs")}
+          className={`glass-card p-6 text-center cursor-pointer transition-all duration-300
+            ${selected === "applied_jobs" ? "ring-2 ring-purple-500 glow-purple" : ""}
+          `}
+        >
+          <div className="w-14 h-14 rounded-xl mx-auto mb-3 bg-gradient-to-br from-purple-700 to-purple-500 flex items-center justify-center">
+            <History className="w-7 h-7 text-foreground" />
+          </div>
+          <h3 className="font-semibold text-foreground mb-1">Applied Jobs</h3>
+          <p className="text-xs text-muted-foreground">View your history</p>
+        </motion.div>
       </div>
 
+      {/* Expanded panel */}
       <AnimatePresence mode="wait">
         {selected === "linkedin" && <PlatformSection key="linkedin" platform="linkedin" profileData={profileData} />}
         {selected === "naukri"   && <PlatformSection key="naukri"   platform="naukri"   profileData={profileData} />}
+        {selected === "applied_jobs" && (
+          <motion.div
+            key="applied_jobs"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+            className="mt-6"
+          >
+            <AppliedJobs />
+          </motion.div>
+        )}
       </AnimatePresence>
     </motion.div>
   );

@@ -70,13 +70,24 @@ export interface StartAutomationParams {
   profile: ProfileData;
 }
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+const _authHeader = (): Record<string, string> => {
+  const token = localStorage.getItem("auth_token");
+  return token ? { "Authorization": `Bearer ${token}` } : {};
+};
+
 // ─── CV upload ────────────────────────────────────────────────────────────────
 
 export const uploadCv = async (file: File): Promise<CvExtractedData> => {
   const form = new FormData();
   form.append("file", file);
 
-  const res = await fetch(`${API}/api/cv/upload`, { method: "POST", body: form });
+  const res = await fetch(`${API}/api/cv/upload`, {
+    method:  "POST",
+    headers: _authHeader(),
+    body:    form,
+  });
 
   if (!res.ok) {
     const detail = await res.text().catch(() => res.statusText);
@@ -107,7 +118,7 @@ export const startAutomation = (
       // WebSocket is live — now tell the backend to start
       fetch(`${API}/api/automation/start`, {
         method:  "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ..._authHeader() },
         body:    JSON.stringify({ ...params, sessionId }),
       }).catch((err) => {
         ws.close();
@@ -181,4 +192,71 @@ export const startAutomation = (
       resolve();
     };
   });
+};
+
+// ─── Profile management ───────────────────────────────────────────────────────
+
+export const getProfileData = async (): Promise<Record<string, unknown>> => {
+  const res = await fetch(`${API}/api/cv/profile`, { headers: _authHeader() });
+  if (!res.ok) throw new Error("No saved profile found.");
+  return res.json();
+};
+
+// ─── Applied Jobs ─────────────────────────────────────────────────────────────
+
+export interface AppliedJob {
+  id:               string;
+  platform:         "linkedin" | "naukri";
+  applied_at:       string;
+  session_role:     string;
+  session_location: string;
+  index:            number;
+  title:            string;
+  company:          string;
+  location:         string;
+  status:           "applied" | "skipped" | "already_applied";
+  reason:           string;
+  description:      string;
+  url:              string;
+  // JOIN fields from user_credentials
+  first_name:       string;
+  last_name:        string;
+  user_email:       string;
+}
+
+export const getAppliedJobs = async (): Promise<AppliedJob[]> => {
+  const res = await fetch(`${API}/api/jobs/applied`, { headers: _authHeader() });
+  if (!res.ok) throw new Error("Failed to load applied jobs.");
+  return res.json();
+};
+
+export const deleteAppliedJob = async (id: string): Promise<void> => {
+  const res = await fetch(`${API}/api/jobs/applied/${id}`, {
+    method:  "DELETE",
+    headers: _authHeader(),
+  });
+  if (!res.ok) throw new Error("Failed to delete job entry.");
+};
+
+export const updateProfileData = async (fields: Record<string, unknown>): Promise<void> => {
+  const res = await fetch(`${API}/api/cv/profile`, {
+    method:  "PATCH",
+    headers: { "Content-Type": "application/json", ..._authHeader() },
+    body:    JSON.stringify(fields),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as any).detail ?? "Profile update failed.");
+  }
+};
+
+export const deleteProfileData = async (): Promise<void> => {
+  const res = await fetch(`${API}/api/cv/profile`, {
+    method:  "DELETE",
+    headers: _authHeader(),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as any).detail ?? "Reset failed.");
+  }
 };
