@@ -73,7 +73,7 @@ export interface StartAutomationParams {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const _authHeader = (): Record<string, string> => {
-  const token = localStorage.getItem("auth_token");
+  const token = sessionStorage.getItem("auth_token");
   return token ? { "Authorization": `Bearer ${token}` } : {};
 };
 

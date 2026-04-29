@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Linkedin, Briefcase, Rocket, History } from "lucide-react";
+import { Linkedin, Briefcase, Rocket, History, Building2 } from "lucide-react";
 import PlatformSection from "./PlatformSection";
+import Big4Section from "./Big4Section";
 import AppliedJobs from "@/pages/AppliedJobs";
 import { ProfileData } from "@/lib/mockApi";
 
@@ -30,11 +31,19 @@ const platforms = [
     gradient: "from-[hsl(220,20%,20%)] to-[hsl(220,20%,30%)]",
     enabled: false,
   },
+  {
+    id: "big4" as const,
+    name: "Big 4",
+    label: "EY · Deloitte · KPMG · PwC",
+    icon: Building2,
+    gradient: "from-yellow-700 to-yellow-500",
+    enabled: true,
+  },
 ];
 
 interface StepPlatformProps { profileData: ProfileData; }
 
-type ActiveView = "linkedin" | "naukri" | "wellfound" | "applied_jobs" | null;
+type ActiveView = "linkedin" | "naukri" | "wellfound" | "big4" | "applied_jobs" | null;
 
 const StepPlatform = ({ profileData }: StepPlatformProps) => {
   const [selected, setSelected] = useState<ActiveView>(null);
@@ -52,7 +61,7 @@ const StepPlatform = ({ profileData }: StepPlatformProps) => {
       <h2 className="text-2xl font-bold text-gradient mb-6 text-center">Choose Job Platform</h2>
 
       {/* Platform cards + Applied Jobs button */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-4">
         {platforms.map((p, i) => (
           <motion.div
             key={p.id}
@@ -108,6 +117,7 @@ const StepPlatform = ({ profileData }: StepPlatformProps) => {
       <AnimatePresence mode="wait">
         {selected === "linkedin" && <PlatformSection key="linkedin" platform="linkedin" profileData={profileData} />}
         {selected === "naukri"   && <PlatformSection key="naukri"   platform="naukri"   profileData={profileData} />}
+        {selected === "big4"     && <Big4Section key="big4" />}
         {selected === "applied_jobs" && (
           <motion.div
             key="applied_jobs"

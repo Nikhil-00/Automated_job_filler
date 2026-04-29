@@ -21,8 +21,8 @@ const portals = [
     icon:        ShieldCheck,
     gradient:    "from-[hsl(280,80%,45%)] to-[hsl(320,80%,55%)]",
     glow:        "glow-purple",
-    route:       "/admin/login",
-    comingSoon:  true,
+    route:       "/admin",
+    comingSoon:  false,
   },
   {
     id:          "company",
@@ -31,8 +31,8 @@ const portals = [
     icon:        Building2,
     gradient:    "from-[hsl(160,70%,35%)] to-[hsl(180,70%,45%)]",
     glow:        "glow-green",
-    route:       "/company/login",
-    comingSoon:  true,
+    route:       "/company",
+    comingSoon:  false,
   },
 ];
 

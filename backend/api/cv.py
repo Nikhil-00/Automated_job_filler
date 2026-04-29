@@ -127,27 +127,39 @@ Resume text:
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
+_ALLOWED_MIME_TYPES = {"application/pdf", "application/octet-stream"}
+_ALLOWED_EXTENSIONS = {".pdf"}
+_MAX_FILE_SIZE      = 10 * 1024 * 1024  # 10 MB
+
+
 @router.post("/api/cv/upload")
 async def upload_cv(
     file: UploadFile = File(...),
     user: dict       = Depends(get_current_user),
 ):
     """
-    Accept a CV (PDF/DOCX), OCR + GPT-parse it, save everything to the
+    Accept a CV (PDF only, max 10 MB), OCR + GPT-parse it, save everything to the
     user's personal data folder.  Returns extracted profile summary.
     """
-    user_id    = int(user["sub"])
-    db_user    = get_user_by_id(user_id)
-    user_dir   = _get_user_folder(db_user["email"], db_user["first_name"])
+    # Validate file type
+    suffix = Path(file.filename or "resume.pdf").suffix.lower()
+    if suffix not in _ALLOWED_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
 
-    suffix = Path(file.filename or "resume.pdf").suffix or ".pdf"
+    # Validate file size by reading into memory (avoids partial-write attacks)
+    contents = await file.read()
+    if len(contents) > _MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="File too large. Maximum size is 10 MB.")
+
+    user_id  = int(user["sub"])
+    db_user  = get_user_by_id(user_id)
+    user_dir = _get_user_folder(db_user["email"], db_user["first_name"])
+
     cv_dest = user_dir / f"uploaded_cv{suffix}"
-
-    with cv_dest.open("wb") as dst:
-        shutil.copyfileobj(file.file, dst)
+    cv_dest.write_bytes(contents)
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        shutil.copy(cv_dest, tmp.name)
+        tmp.write(contents)
         tmp_path = tmp.name
 
     try:

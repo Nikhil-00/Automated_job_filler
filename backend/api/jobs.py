@@ -33,9 +33,9 @@ def append_job_entry(user_id: int, entry: dict) -> None:
             """
             INSERT INTO applied_jobs
                 (id, user_id, platform, applied_at, session_role, session_location,
-                 job_index, title, company, location, status, reason, description, url)
+                 job_index, title, company, location, status, reason, description, url, match_score)
             VALUES
-                (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 entry.get("id",               str(uuid.uuid4())),
@@ -52,6 +52,7 @@ def append_job_entry(user_id: int, entry: dict) -> None:
                 entry.get("reason",           ""),
                 entry.get("description",      ""),
                 entry.get("url",              ""),
+                entry.get("match_score",      0),
             ),
         )
         conn.commit()

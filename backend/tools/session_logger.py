@@ -20,14 +20,32 @@ class SessionLogger:
         self._loop    = loop
         self._counter = 0
 
+    @property
+    def is_active(self) -> bool:
+        """Return True if the session is still active and hasn't been stopped."""
+        with _sessions_lock:
+            state = _sessions.get(self._sid)
+            return state is not None and state.is_active
+
     # ── internal ──────────────────────────────────────────────────────────────
 
     def _enqueue(self, payload: dict) -> None:
+        # Capture queue reference inside lock, then call run_coroutine_threadsafe
+        # outside the lock to avoid blocking the event loop thread.
         with _sessions_lock:
-            q = _sessions.get(self._sid)
-        if q is None:
-            return
-        asyncio.run_coroutine_threadsafe(q.put(json.dumps(payload)), self._loop)
+            state = _sessions.get(self._sid)
+            if state is None:
+                return
+
+            msg_str = json.dumps(payload)
+            state.add_to_history(msg_str)
+
+            if payload.get("type") == "screenshot":
+                state.last_screenshot = payload.get("payload", {}).get("data")
+
+            queue = state.queue
+
+        asyncio.run_coroutine_threadsafe(queue.put(msg_str), self._loop)
 
     def _log(self, message: str, log_type: str) -> None:
         self._counter += 1

@@ -3,10 +3,11 @@ import { motion } from "framer-motion";
 import { Loader2, CheckCircle, Lock } from "lucide-react";
 import GlowButton from "./GlowButton";
 import LiveLog from "./LiveLog";
-import { startAutomation, LogEntry, ProfileData, CompanyEntry, CostSummary } from "@/lib/mockApi";
+import { ProfileData } from "@/lib/mockApi";
+import { useAutomation } from "@/contexts/AutomationContext";
 
 interface PlatformSectionProps {
-  platform:    "linkedin" | "naukri";
+  platform: "linkedin" | "naukri";
   profileData: ProfileData;
 }
 
@@ -18,101 +19,94 @@ const PlatformSection = ({ platform, profileData }: PlatformSectionProps) => {
   const isLinkedin = platform === "linkedin";
   const accentColor = isLinkedin ? "primary" : "orange";
 
+  const { states, startAutomation: runAutomationGlobal, stopAutomation, setLoginStatus } = useAutomation();
+  const state = states[platform];
+  const {
+    logs,
+    progress,
+    isRunning,
+    screenshot,
+    companies,
+    costSummary,
+    loginStatus
+  } = state;
+
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
-  const [loginStatus, setLoginStatus] = useState<"idle" | "opening" | "logging" | "connected" | "error">("idle");
-  const [loginError, setLoginError] = useState<string>("");
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   const [role, setRole] = useState("Data Scientist");
   const [selectedLevels, setSelectedLevels] = useState<string[]>(["Mid-Senior"]);
   const [locationFilter, setLocationFilter] = useState("India");
   const [selectedJobTypes, setSelectedJobTypes] = useState<string[]>(["Full-time"]);
-  const [applyType, setApplyType] = useState<"easy_apply" | "external">("easy_apply");  // external locked for now
+  const [applyType, setApplyType] = useState<"easy_apply" | "external">("easy_apply");
   const [count, setCount] = useState(10);
-
-  const [logs, setLogs]           = useState<LogEntry[]>([]);
-  const [progress, setProgress]   = useState({ current: 0, total: 0 });
-  const [isRunning, setIsRunning] = useState(false);
-  const [screenshot, setScreenshot] = useState<string | null>(null);
-  const [companies, setCompanies]   = useState<CompanyEntry[]>([]);
-  const [costSummary, setCostSummary] = useState<CostSummary | null>(null);
-
   const toggleChip = (arr: string[], val: string, setter: (v: string[]) => void) => {
     setter(arr.includes(val) ? arr.filter((x) => x !== val) : [...arr, val]);
   };
 
   const handleLogin = async () => {
     if (!loginEmail || !loginPassword) {
-      setLoginError("Please enter both email and password.");
-      setLoginStatus("error");
+      setLoginError("Please fill both email and password.");
       return;
     }
-
-    setLoginError("");
-    setLoginStatus("opening");
+    setLoginError(null);
+    setLoginStatus(platform, "opening");
 
     try {
-      setLoginStatus("logging");
-      const token = localStorage.getItem("auth_token");
-      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000"}/api/verify-credentials`, {
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000"}/api/verify-credentials`, {
         method: "POST",
         headers: {
-          "Content-Type":  "application/json",
-          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${sessionStorage.getItem("auth_token")}`,
         },
         body: JSON.stringify({
+          platform,
           email: loginEmail,
           password: loginPassword,
-          platform: platform,
         }),
       });
 
-      if (res.ok) {
-        setLoginStatus("connected");
+      if (response.ok) {
+        setLoginStatus(platform, "connected");
       } else {
-        const data = await res.json().catch(() => ({ detail: "Unknown error" }));
-        const msg: string = data.detail ?? "Login failed.";
-        setLoginError(msg);
-        setLoginStatus("error");
+        const errorData = await response.json().catch(() => ({ detail: "Login failed" }));
+        setLoginError(errorData.detail || "Credentials were not accepted.");
+        setLoginStatus(platform, "error");
       }
-    } catch {
-      setLoginError("Cannot reach the server. Make sure the backend is running.");
-      setLoginStatus("error");
+    } catch (err) {
+      setLoginError("Failed to connect to browser.");
+      setLoginStatus(platform, "error");
     }
   };
 
   const handleStart = async () => {
-    setIsRunning(true);
-    setLogs([]);
-    setCompanies([]);
-    setScreenshot(null);
-    setCostSummary(null);
-    setProgress({ current: 0, total: count });
-    await startAutomation(
-      {
+    if (loginStatus !== "connected") {
+      setLoginError("Please connect to " + (isLinkedin ? "LinkedIn" : "Naukri") + " first.");
+      return;
+    }
+
+    try {
+      setLoginError(null);
+      await runAutomationGlobal({
         platform,
         credentials: { email: loginEmail, password: loginPassword },
         filters: {
-          role:            role || "Data Scientist",
+          role: role || "Data Scientist",
           experienceLevel: selectedLevels,
-          location:        locationFilter || "India",
-          jobType:         selectedJobTypes,
-          applyType:       isLinkedin ? applyType : "external",
+          location: locationFilter || "India",
+          jobType: selectedJobTypes,
+          applyType: isLinkedin ? applyType : "external",
         },
         count,
         profile: profileData,
-      },
-      (log)           => setLogs((prev) => [...prev, log]),
-      (current, total)=> setProgress({ current, total }),
-      (b64)           => setScreenshot(b64),
-      (c)             => setCompanies((prev) => [...prev, c]),
-      (cost)          => setCostSummary(cost)
-    );
-    setIsRunning(false);
+      });
+    } catch (err: any) {
+      setLoginError(err.message || "Failed to start automation.");
+    }
   };
 
   const inputCls = "w-full px-4 py-2.5 rounded-lg bg-input border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition text-sm";
-
   const chipBase = "px-3 py-1.5 rounded-full text-xs font-medium border cursor-pointer transition-all duration-200 select-none";
 
   return (
@@ -150,7 +144,7 @@ const PlatformSection = ({ platform, profileData }: PlatformSectionProps) => {
               disabled={loginStatus === "connected" || loginStatus === "opening" || loginStatus === "logging"}
               className="w-full text-sm py-2"
             >
-              {(loginStatus === "idle" || loginStatus === "error") && "Connect"}
+              {(loginStatus === "idle" || loginStatus === "error" || !loginStatus) && "Connect"}
               {loginStatus === "opening" && (
                 <span className="flex items-center gap-2"><Loader2 className="w-3 h-3 animate-spin" /> Opening browser...</span>
               )}
@@ -158,7 +152,7 @@ const PlatformSection = ({ platform, profileData }: PlatformSectionProps) => {
                 <span className="flex items-center gap-2"><Loader2 className="w-3 h-3 animate-spin" /> Verifying credentials...</span>
               )}
               {loginStatus === "connected" && (
-                <span className="flex items-center gap-2"><CheckCircle className="w-3 h-3" /> Connected ✓</span>
+                <span className="flex items-center gap-2 font-bold"><CheckCircle className="w-4 h-4 text-green-400" /> Connected ✓</span>
               )}
             </GlowButton>
 
@@ -184,11 +178,10 @@ const PlatformSection = ({ platform, profileData }: PlatformSectionProps) => {
                   <span
                     key={l}
                     onClick={() => toggleChip(selectedLevels, l, setSelectedLevels)}
-                    className={`${chipBase} ${
-                      selectedLevels.includes(l)
-                        ? isLinkedin ? "border-primary bg-primary/20 text-primary" : "border-neon-orange bg-neon-orange/20 text-neon-orange"
-                        : "border-border text-muted-foreground hover:border-muted-foreground"
-                    }`}
+                    className={`${chipBase} ${selectedLevels.includes(l)
+                      ? isLinkedin ? "border-primary bg-primary/20 text-primary" : "border-neon-orange bg-neon-orange/20 text-neon-orange"
+                      : "border-border text-muted-foreground hover:border-muted-foreground"
+                      }`}
                   >
                     {l}
                   </span>
@@ -206,11 +199,10 @@ const PlatformSection = ({ platform, profileData }: PlatformSectionProps) => {
                   <span
                     key={t}
                     onClick={() => toggleChip(selectedJobTypes, t, setSelectedJobTypes)}
-                    className={`${chipBase} ${
-                      selectedJobTypes.includes(t)
-                        ? isLinkedin ? "border-primary bg-primary/20 text-primary" : "border-neon-orange bg-neon-orange/20 text-neon-orange"
-                        : "border-border text-muted-foreground hover:border-muted-foreground"
-                    }`}
+                    className={`${chipBase} ${selectedJobTypes.includes(t)
+                      ? isLinkedin ? "border-primary bg-primary/20 text-primary" : "border-neon-orange bg-neon-orange/20 text-neon-orange"
+                      : "border-border text-muted-foreground hover:border-muted-foreground"
+                      }`}
                   >
                     {t}
                   </span>
@@ -219,22 +211,18 @@ const PlatformSection = ({ platform, profileData }: PlatformSectionProps) => {
             </div>
 
             {isLinkedin && (
-              <div>
+              <div className="mt-3">
                 <label className="block text-xs text-muted-foreground mb-1">Apply Type</label>
                 <div className="flex gap-2">
-                  {/* Easy Apply — fully enabled */}
                   <span
                     onClick={() => setApplyType("easy_apply")}
-                    className={`${chipBase} ${
-                      applyType === "easy_apply"
-                        ? "border-primary bg-primary/20 text-primary"
-                        : "border-border text-muted-foreground hover:border-muted-foreground"
-                    }`}
+                    className={`${chipBase} ${applyType === "easy_apply"
+                      ? "border-primary bg-primary/20 text-primary"
+                      : "border-border text-muted-foreground hover:border-muted-foreground"
+                      }`}
                   >
                     Easy Apply
                   </span>
-
-                  {/* External Website — locked / coming soon */}
                   <span
                     className={`${chipBase} border-border text-muted-foreground/40 cursor-not-allowed opacity-50 flex items-center gap-1.5`}
                     title="External Website apply is coming soon"
@@ -274,11 +262,10 @@ const PlatformSection = ({ platform, profileData }: PlatformSectionProps) => {
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={() => setCount(n)}
-                    className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-sm cursor-pointer transition-all duration-200 ${
-                      count === n
-                        ? isLinkedin ? "gradient-blue-purple text-foreground glow-blue" : "bg-neon-orange text-foreground glow-orange"
-                        : "bg-muted text-muted-foreground hover:bg-muted/80"
-                    }`}
+                    className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-sm cursor-pointer transition-all duration-200 ${count === n
+                      ? isLinkedin ? "gradient-blue-purple text-foreground glow-blue" : "bg-neon-orange text-foreground glow-orange"
+                      : "bg-muted text-muted-foreground hover:bg-muted/80"
+                      }`}
                   >
                     {n}
                   </motion.span>
@@ -287,17 +274,37 @@ const PlatformSection = ({ platform, profileData }: PlatformSectionProps) => {
             </div>
           </div>
 
-          {/* Start Button */}
-          <GlowButton
-            variant={isLinkedin ? "primary" : "orange"}
-            onClick={handleStart}
-            disabled={loginStatus !== "connected" || isRunning}
-            loading={isRunning}
-            pulse
-            className="w-full text-base py-4"
-          >
-            🚀 Start Applying
-          </GlowButton>
+          {/* Start / Stop Button */}
+          {isRunning ? (
+            <GlowButton
+              variant="orange"
+              onClick={() => stopAutomation(platform)}
+              className="w-full text-base py-4 font-bold border-2 border-orange-500/50 shadow-[0_0_20px_rgba(249,115,22,0.3)] hover:shadow-[0_0_30px_rgba(249,115,22,0.5)] transition-all"
+            >
+              🛑 Stop Automation
+            </GlowButton>
+          ) : (
+            <GlowButton
+              variant={isLinkedin ? "primary" : "orange"}
+              onClick={handleStart}
+              disabled={loginStatus !== "connected"}
+              loading={isRunning}
+              pulse
+              className="w-full text-base py-4"
+            >
+              🚀 Start Applying
+            </GlowButton>
+          )}
+
+          {loginError && (
+            <motion.p
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-xs text-red-400 mt-2 text-center font-medium bg-red-400/10 py-2 rounded-lg border border-red-400/20"
+            >
+              ❌ {loginError}
+            </motion.p>
+          )}
         </div>
 
         {/* Right Panel */}

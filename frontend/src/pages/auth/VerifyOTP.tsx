@@ -5,6 +5,7 @@ import { Loader2, MailCheck } from "lucide-react";
 import AnimatedBackground from "@/components/AnimatedBackground";
 import GlowButton from "@/components/GlowButton";
 import { resendOtp, setToken, verifyOtp } from "@/lib/auth";
+import { getCVBuilder }                  from "@/lib/cvBuilderApi";
 
 const VerifyOTP = () => {
   const navigate = useNavigate();
@@ -54,7 +55,12 @@ const VerifyOTP = () => {
       const user = await verifyOtp({ email, otp_code: code });
       setToken(user.token);
       localStorage.removeItem("pending_verify_email");
-      navigate("/dashboard");
+      try {
+        await getCVBuilder();
+        navigate("/dashboard");
+      } catch {
+        navigate("/cv-builder");
+      }
     } catch (err: any) {
       setError(err.message ?? "Invalid code. Please try again.");
       setDigits(["", "", "", "", "", ""]);

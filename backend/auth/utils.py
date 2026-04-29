@@ -5,7 +5,7 @@ Password hashing, JWT creation/decoding, OTP generation, email sending.
 """
 from __future__ import annotations
 
-import random
+import secrets
 import smtplib
 from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
@@ -38,8 +38,8 @@ def verify_password(plain: str, hashed: str) -> bool:
 # ── OTP ───────────────────────────────────────────────────────────────────────
 
 def generate_otp() -> str:
-    """Generate a 6-digit OTP code."""
-    return str(random.randint(100000, 999999))
+    """Generate a cryptographically secure 6-digit OTP."""
+    return str(secrets.randbelow(900000) + 100000)
 
 
 # ── JWT ───────────────────────────────────────────────────────────────────────
@@ -77,7 +77,6 @@ def send_otp_email(to_email: str, name: str, otp: str) -> None:
       <table width="480" cellpadding="0" cellspacing="0"
              style="background:#1a1a2e;border-radius:16px;
                     border:1px solid #2d2d4e;overflow:hidden">
-        <!-- Header -->
         <tr>
           <td style="background:linear-gradient(135deg,#7c3aed,#2563eb);
                      padding:24px 32px;text-align:center">
@@ -88,7 +87,6 @@ def send_otp_email(to_email: str, name: str, otp: str) -> None:
             </p>
           </td>
         </tr>
-        <!-- Body -->
         <tr>
           <td style="padding:32px">
             <p style="margin:0 0 8px;color:#e2e8f0;font-size:16px">
@@ -96,9 +94,8 @@ def send_otp_email(to_email: str, name: str, otp: str) -> None:
             </p>
             <p style="margin:0 0 24px;color:#94a3b8;font-size:14px">
               Use the code below to verify your email address.
-              It expires in <strong style="color:#e2e8f0">10 minutes</strong>.
+              It expires in <strong style="color:#e2e8f0">5 minutes</strong>.
             </p>
-            <!-- OTP box -->
             <div style="background:#0f0f1a;border:2px solid #7c3aed;
                         border-radius:12px;padding:20px;text-align:center;
                         margin-bottom:24px">

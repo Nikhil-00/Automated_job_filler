@@ -3702,17 +3702,33 @@ import json
 import os
 import re
 import random
+import threading
 
 from . import external_apply as _ext
 
 load_dotenv()
 
 _openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-_ai_cache: dict = {}      # per-field GPT cache (legacy per-step path)
-_answer_cache: dict = {}  # session-level screening answer cache (Tier 2)
 
-# Set by server.py before calling run_automation(); None when running standalone.
-_logger = None
+# ── Thread-local run state ────────────────────────────────────────────────────
+# All per-run mutable state lives in _tls so concurrent automation threads for
+# different users never overwrite each other's credentials or counters.
+_tls = threading.local()
+
+
+def _tls_get(attr: str, default=None):
+    return getattr(_tls, attr, default)
+
+
+# Per-run caches: cleared at the start of each run_automation() call.
+# Sharing these across threads is safe — they are just answer caches.
+_ai_cache:     dict = {}
+_answer_cache: dict = {}
+
+
+# Set by run_automation() on the calling thread; None when running standalone.
+def _logger():
+    return _tls_get("logger")
 
 # ── Token / cost tracking ─────────────────────────────────────────────────────
 # gpt-4o-mini pricing (per 1M tokens, as of 2025)
@@ -3723,34 +3739,29 @@ _total_input_tokens  = 0
 _total_output_tokens = 0
 
 def _track_usage(response) -> None:
-    """Record token usage from any OpenAI API response."""
-    global _total_input_tokens, _total_output_tokens
     if response.usage:
-        _total_input_tokens  += response.usage.prompt_tokens
-        _total_output_tokens += response.usage.completion_tokens
+        _tls.input_tokens  = _tls_get("input_tokens",  0) + response.usage.prompt_tokens
+        _tls.output_tokens = _tls_get("output_tokens", 0) + response.usage.completion_tokens
 
 def _reset_usage() -> None:
-    global _total_input_tokens, _total_output_tokens
-    _total_input_tokens  = 0
-    _total_output_tokens = 0
+    _tls.input_tokens  = 0
+    _tls.output_tokens = 0
 
 def _cost_summary() -> dict:
-    """Return token counts and USD cost for this run."""
-    cost = (
-        _total_input_tokens  * _GPT_PRICE_INPUT +
-        _total_output_tokens * _GPT_PRICE_OUTPUT
-    )
+    inp  = _tls_get("input_tokens",  0)
+    out  = _tls_get("output_tokens", 0)
+    cost = inp * _GPT_PRICE_INPUT + out * _GPT_PRICE_OUTPUT
     return {
-        "input_tokens":  _total_input_tokens,
-        "output_tokens": _total_output_tokens,
-        "total_tokens":  _total_input_tokens + _total_output_tokens,
+        "input_tokens":  inp,
+        "output_tokens": out,
+        "total_tokens":  inp + out,
         "cost_usd":      round(cost, 6),
     }
 
 def _log(message: str, log_type: str = "info") -> None:
-    """Send a log line to the WebSocket session (if connected) and stdout."""
-    if _logger is not None:
-        getattr(_logger, log_type, _logger.info)(message)
+    lg = _logger()
+    if lg is not None:
+        getattr(lg, log_type, lg.info)(message)
     print(message)
 
 
@@ -3764,11 +3775,12 @@ def _screenshot(page) -> None:
     Fallback: capture a single frame and stream it to the frontend.
     Used when CDPScreencaster is unavailable or as a supplementary snapshot.
     """
-    if _logger is None or not hasattr(_logger, "screenshot"):
+    lg = _logger()
+    if lg is None or not hasattr(lg, "screenshot"):
         return
     try:
         img_bytes = page.screenshot(type="jpeg", quality=55, full_page=False)
-        _logger.screenshot(base64.b64encode(img_bytes).decode())
+        lg.screenshot(base64.b64encode(img_bytes).decode())
     except Exception:
         pass
 
@@ -3921,8 +3933,9 @@ def _send_company(index: int, title: str, company: str, location: str,
                   status: str, reason: str = "",
                   description: str = "", url: str = "") -> None:
     """Send structured company result to the frontend companies table."""
-    if _logger is not None and hasattr(_logger, "company"):
-        _logger.company({
+    lg = _logger()
+    if lg is not None and hasattr(lg, "company"):
+        lg.company({
             "index":       index,
             "title":       title,
             "company":     company,
@@ -4090,8 +4103,7 @@ Field type: {field_type}
             # Change C: in server/headless mode skip ask_user_fallback;
             # auto-pick the safest option without blocking stdin.
             if ask_user_if_unsure:
-                if _logger is not None:
-                    # Server mode: auto-pick affirmative option, or first option
+                if _logger() is not None:
                     _YES_WORDS = {"yes", "y", "true", "1", "agree", "accept"}
                     affirmative = next(
                         (o for o in options if o.strip().lower() in _YES_WORDS), None
@@ -4101,7 +4113,6 @@ Field type: {field_type}
                     _ai_cache[cache_key] = chosen
                     return chosen
                 else:
-                    # Standalone terminal mode: ask user
                     print(f"     AI answer '{answer}' didn't match any option — asking user.")
                     user_ans = ask_user_fallback(question, options)
                     _ai_cache[cache_key] = user_ans
@@ -4115,8 +4126,7 @@ Field type: {field_type}
     except Exception as e:
         print(f"     AI answer error: {e}")
         if options and ask_user_if_unsure:
-            if _logger is not None:
-                # Server mode: never block — pick first available real option
+            if _logger() is not None:
                 return options[0] if options else ""
             return ask_user_fallback(question, options)
         return ""
@@ -4127,15 +4137,23 @@ SCRIPT_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__fil
 BROWSER_PROFILE_DIR = os.path.join(SCRIPT_DIR, "linkedin_browser_profile")
 
 # =============================================
-# CONFIG
+# CONFIG  (module-level defaults for standalone / CLI use)
 # =============================================
-LINKEDIN_EMAIL    = os.getenv("LINKEDIN_EMAIL")
-LINKEDIN_PASSWORD = os.getenv("LINKEDIN_PASSWORD")
+LINKEDIN_EMAIL    = os.getenv("LINKEDIN_EMAIL", "")
+LINKEDIN_PASSWORD = os.getenv("LINKEDIN_PASSWORD", "")
 JOB_SEARCH_QUERY  = "Data Scientist"
 JOB_LOCATION      = "India"
 MAX_APPLICATIONS  = 20
-EASY_APPLY_ONLY   = True   # True = LinkedIn Easy Apply filter; False = all jobs (external apply)
+EASY_APPLY_ONLY   = True
 # =============================================
+# Per-run accessors — read from thread-local when set, fall back to module globals.
+# run_automation() sets these so concurrent users never overwrite each other.
+def _email()       -> str:  return _tls_get("email",        LINKEDIN_EMAIL)
+def _password()    -> str:  return _tls_get("password",     LINKEDIN_PASSWORD)
+def _search_query()-> str:  return _tls_get("search_query", JOB_SEARCH_QUERY)
+def _location()    -> str:  return _tls_get("location",     JOB_LOCATION)
+def _max_apps()    -> int:  return _tls_get("max_apps",     MAX_APPLICATIONS)
+def _easy_apply()  -> bool: return _tls_get("easy_apply",   EASY_APPLY_ONLY)
 
 
 def load_profile() -> dict:
@@ -4277,8 +4295,8 @@ def _js_fill_login(page) -> bool:
                 continue
         return False
 
-    email_ok = _fill_field(_EMAIL_SELS, LINKEDIN_EMAIL or "")
-    pass_ok  = _fill_field(_PASS_SELS,  LINKEDIN_PASSWORD or "")
+    email_ok = _fill_field(_EMAIL_SELS, _email() or "")
+    pass_ok  = _fill_field(_PASS_SELS,  _password() or "")
     return email_ok and pass_ok
 
 
@@ -4337,7 +4355,7 @@ def login_linkedin(page) -> str:
             return "success"
         print("Login form not detected.")
         page.screenshot(path=os.path.join(SCRIPT_DIR, "linkedin_login_debug.png"))
-        if _logger is None:
+        if _logger() is None:
             input("Please log in manually in the browser window, then press Enter here...")
         return "failed"
 
@@ -4348,27 +4366,54 @@ def login_linkedin(page) -> str:
 
     if not filled:
         print("Could not inject credentials.")
-        if _logger is None:
+        if _logger() is None:
             input("Log in manually then press Enter here...")
         return "failed"
+
+    # ── Dismiss cookie banner ────────────────────────────────────────────────
+    try:
+        for sel in [
+            "button[aria-label='Accept all cookies']",
+            "button:has-text('Accept')",
+            "button:has-text('Agree & Join')",
+            "button#artdeco-global-alert-container-action",
+        ]:
+            btn = page.query_selector(sel)
+            if btn and btn.is_visible():
+                btn.click(timeout=2000)
+                time.sleep(0.5)
+                break
+    except Exception:
+        pass
 
     time.sleep(0.5)
 
     # Submit the form
     submitted = False
     for sel in [
-        "button[type='submit']",
-        "button[data-litms-control-urn*='login']",
+        "button#login-submit",
+        "form button[type='submit']",
+        "button[type='submit']:not(:has-text('with')):not(:has-text('Microsoft')):not(:has-text('Apple')):not(:has-text('Google'))",
         "button.sign-in-form__submit-button",
-        "button:has-text('Sign in')",
+        "button:text-is('Sign in')",
+        "button:has-text('Sign in'):not(:has-text('with'))",
+        # Exact match with possible whitespace
+        "button:has-text(' Sign in ')",
     ]:
         try:
             btn = page.query_selector(sel)
             if btn:
-                btn.click()
+                # Use a forced click fallback if the regular click is blocked
+                try:
+                    btn.click(timeout=5000)
+                except Exception:
+                    # If normal click fails (e.g. obscured), use JS click
+                    page.evaluate("el => el.click()", btn)
                 submitted = True
+                print(f"  [submit-v2] clicked button '{sel}'")
                 break
-        except Exception:
+        except Exception as e:
+            print(f"  [submit] failed to click '{sel}': {e}")
             continue
 
     if not submitted:
@@ -4377,8 +4422,26 @@ def login_linkedin(page) -> str:
         except Exception:
             pass
 
-    # Wait for LinkedIn to respond — either redirect to feed or show an error
-    time.sleep(4)
+    # Wait for LinkedIn to respond — either redirect to feed, show a checkpoint, or an error
+    try:
+        page.wait_for_function(
+            """() => {
+                const u = window.location.href;
+                const body = document.body.innerText;
+                return (
+                    /feed|\\/in\\/|mynetwork|jobs|home/.test(u) ||
+                    /checkpoint|challenge|captcha|two-step|pin|\\/verify/.test(u) ||
+                    !!document.querySelector('#error-for-password') ||
+                    !!document.querySelector('#error-for-username') ||
+                    !!document.querySelector('.form__label--error') ||
+                    /wrong password|incorrect password|not the right password|incorrect email or password/i.test(body)
+                );
+            }""",
+            timeout=10000,
+        )
+    except Exception:
+        # Fallback to a small sleep if wait_for_function fails/times out
+        time.sleep(2)
 
     url = page.url
 
@@ -4388,11 +4451,32 @@ def login_linkedin(page) -> str:
         _log("LinkedIn login successful.", "info")
         return "success"
 
-    # ── Security checkpoint (CAPTCHA / unusual activity / 2FA) ───────────────
-    if any(x in url for x in ("checkpoint", "challenge", "captcha", "two-step", "pin")):
+    # ── Security checkpoint (URL-based or body-based) ─────────────────────────
+    checkpoint_detected = False
+    _CHECKPOINT_PHRASES = [
+        "verify", "verification", "captcha", "security check",
+        "unusual activity", "confirm it's you", "let's do a quick",
+        "we need to verify", "complete this challenge", "prove you're not",
+        "enter the code", "verification code", "sent a code", "check your email",
+    ]
+
+    if any(x in url for x in ("checkpoint", "challenge", "captcha", "two-step", "pin", "/verify")):
+        checkpoint_detected = True
+    else:
+        try:
+            body_lower = (page.inner_text("body") or "").lower()
+            if any(p in body_lower for p in _CHECKPOINT_PHRASES):
+                # Double check we're not just seeing the word "verify" in an error message
+                # like "please verify your email and password" (from our own log, but in body?)
+                # Actually LinkedIn's text is more specific.
+                checkpoint_detected = True
+        except Exception:
+            pass
+
+    if checkpoint_detected:
         print("Security check required.")
         _log("LinkedIn security check detected — please complete it in the browser.", "warning")
-        if _logger is None:
+        if _logger() is None:
             input("Complete the security check then press Enter...")
         return "checkpoint"
 
@@ -4462,9 +4546,9 @@ def login_linkedin(page) -> str:
     # ── Unknown state ─────────────────────────────────────────────────────────
     print(f"Login state unclear (URL: {url})")
     _log(f"LinkedIn login state unclear (URL: {url}) — proceeding anyway.", "warning")
-    if _logger is None:
+    if _logger() is None:
         input("Press Enter to continue...")
-    return "success"   # optimistic: assume logged in on unknown URLs
+    return "success"
 
 
 # ---------------------------------------------------------------------------
@@ -4529,15 +4613,15 @@ def get_easy_apply_jobs(page, needed: int = 10) -> list[dict]:
     25 results fully rendered.  No scrolling, no IntersectionObserver, no
     selector guessing — just load the next URL and extract cards.
     """
-    _log(f"Searching for '{JOB_SEARCH_QUERY}' jobs in {JOB_LOCATION}...", "info")
+    _log(f"Searching for '{_search_query()}' jobs in {_location()}...", "info")
 
     base_url = (
         f"https://www.linkedin.com/jobs/search/"
-        f"?keywords={JOB_SEARCH_QUERY.replace(' ', '%20')}"
-        f"&location={JOB_LOCATION.replace(' ', '%20')}"
-        f"&sortBy=R"           # sort by relevance
+        f"?keywords={_search_query().replace(' ', '%20')}"
+        f"&location={_location().replace(' ', '%20')}"
+        f"&sortBy=R"
     )
-    if EASY_APPLY_ONLY:
+    if _easy_apply():
         base_url += "&f_AL=true"   # LinkedIn's Easy Apply filter
 
     seen_urls: set[str] = set()
@@ -5322,8 +5406,47 @@ def _modal_execute(page, profile: dict, action: dict) -> tuple[bool, str]:
                             return (False, f"native select failed for '{resolved}': {e2}")
 
                 else:
-                    # ── LinkedIn custom multipleChoice / Workday-style dropdown ──
-                    # Pattern: click to open → listbox appears → click matching option
+                    val_lower = value.lower()
+
+                    # ── Pass 1: text-entity-list / button-group (options already visible) ──
+                    # LinkedIn renders Yes/No and similar questions as a group of
+                    # ALREADY-VISIBLE buttons — no dropdown to open.  Search for
+                    # the matching option SCOPED INSIDE the container element so we
+                    # never accidentally click an unrelated "No" elsewhere on the page.
+                    for scoped_sel in [
+                        f'button:has-text("{value}")',
+                        f'label:has-text("{value}")',
+                        f'[role="radio"]:has-text("{value}")',
+                        f'[role="option"]:has-text("{value}")',
+                        f'span:has-text("{value}")',
+                    ]:
+                        try:
+                            scoped = loc.locator(scoped_sel).first
+                            if scoped.count() > 0 and scoped.is_visible():
+                                scoped.scroll_into_view_if_needed()
+                                scoped.click(timeout=2000)
+                                page.wait_for_timeout(500)
+                                return (True, "")
+                        except Exception:
+                            continue
+
+                    # Also try iterating all child buttons/labels within the container
+                    try:
+                        for child in loc.locator("button, label, [role='option']").all():
+                            try:
+                                txt = (child.inner_text() or "").strip().lower()
+                                if txt == val_lower or val_lower in txt:
+                                    child.scroll_into_view_if_needed()
+                                    child.click(timeout=1500)
+                                    page.wait_for_timeout(500)
+                                    return (True, "")
+                            except Exception:
+                                continue
+                    except Exception:
+                        pass
+
+                    # ── Pass 2: LinkedIn custom dropdown (click to open) ──────────────
+                    # Pattern: click container to open → listbox appears → click option
                     try:
                         loc.scroll_into_view_if_needed()
                         loc.click()
@@ -5332,8 +5455,7 @@ def _modal_execute(page, profile: dict, action: dict) -> tuple[bool, str]:
                         loc.dispatch_event("click")
                         page.wait_for_timeout(600)
 
-                    # Find matching option in the opened listbox
-                    val_lower = value.lower()
+                    # Find matching option in the opened listbox (page-level after open)
                     for opt_sel in [
                         f'[role="option"]:has-text("{value}")',
                         f'li:has-text("{value}")',
@@ -5342,7 +5464,7 @@ def _modal_execute(page, profile: dict, action: dict) -> tuple[bool, str]:
                     ]:
                         try:
                             opt = page.locator(opt_sel).first
-                            if opt.count() > 0:
+                            if opt.count() > 0 and opt.is_visible():
                                 opt.click(timeout=2000)
                                 page.wait_for_timeout(400)
                                 return (True, "")
@@ -6618,7 +6740,7 @@ def is_good_fit(job: dict, description: str) -> tuple[bool, str]:
     # becomes ["AIML", "Engineer", "Data", "Scientist"].
     query_terms = [
         t.strip().lower()
-        for t in re.split(r"[,|/\s]+", JOB_SEARCH_QUERY)
+        for t in re.split(r"[,|/\s]+", _search_query())
         if len(t.strip()) > 2
     ]
     title_lower = job["title"].lower()
@@ -6629,7 +6751,7 @@ def is_good_fit(job: dict, description: str) -> tuple[bool, str]:
     # ── Slow path: GPT skill-overlap check ───────────────────────────────────
     prompt = f"""You are a recruiter screening a job application.
 
-The user is searching for: "{JOB_SEARCH_QUERY}"
+The user is searching for: "{_search_query()}"
 
 Candidate's resume summary:
 {RESUME_TEXT[:1500]}
@@ -6694,11 +6816,11 @@ def apply_to_job(page, job: dict, index: int, profile: dict) -> str:
         job_id = job_url.rstrip("/").split("/")[-1]
         pane_url = (
             f"https://www.linkedin.com/jobs/search/"
-            f"?keywords={JOB_SEARCH_QUERY.replace(' ', '%20')}"
-            f"&location={JOB_LOCATION.replace(' ', '%20')}"
+            f"?keywords={_search_query().replace(' ', '%20')}"
+            f"&location={_location().replace(' ', '%20')}"
             f"&currentJobId={job_id}"
         )
-        if EASY_APPLY_ONLY:
+        if _easy_apply():
             pane_url += "&f_AL=true"
 
         try:
@@ -7110,11 +7232,11 @@ def main():
             login_linkedin(page)
             take_screenshot(page, "linkedin_after_login.png")
 
-            job_cards = get_easy_apply_jobs(page, needed=MAX_APPLICATIONS)
+            job_cards = get_easy_apply_jobs(page, needed=_max_apps())
 
             results = {"applied": [], "skipped": [], "already_applied": []}
 
-            for i, job in enumerate(job_cards[:MAX_APPLICATIONS], start=1):
+            for i, job in enumerate(job_cards[:_max_apps()], start=1):
                 status = apply_to_job(page, job, i, profile)
                 results[status].append(i)
                 time.sleep(2)
@@ -7144,27 +7266,47 @@ def main():
 # Programmatic entry point  (called by server.py)
 # ---------------------------------------------------------------------------
 
-def run_automation(profile: dict, logger=None) -> None:
+def run_automation(
+    profile: dict,
+    logger=None,
+    stop_event=None,
+    email: str | None = None,
+    password: str | None = None,
+    search_query: str | None = None,
+    location: str | None = None,
+    max_apps: int | None = None,
+    easy_apply: bool | None = None,
+) -> None:
     """
     Run the full LinkedIn automation pipeline.
-    Called by server.py's background thread.
-    `logger` is a SessionLogger instance that streams events over WebSocket.
+    All per-run config is stored in thread-local storage so concurrent runs
+    for different users never overwrite each other.
     """
-    global _logger
-    _logger = logger
-    _reset_usage()   # start fresh token counters for this run
+    # ── Store all per-run state in thread-local ────────────────────────────────
+    _tls.logger       = logger
+    _tls.email        = email        if email        is not None else LINKEDIN_EMAIL
+    _tls.password     = password     if password     is not None else LINKEDIN_PASSWORD
+    _tls.search_query = search_query if search_query is not None else JOB_SEARCH_QUERY
+    _tls.location     = location     if location     is not None else JOB_LOCATION
+    _tls.max_apps     = max_apps     if max_apps     is not None else MAX_APPLICATIONS
+    _tls.easy_apply   = easy_apply   if easy_apply   is not None else EASY_APPLY_ONLY
 
-    # Inject shared resources into the external-apply module
+    # Clear caches in-place (avoids rebinding the module-level name mid-run for other threads)
+    _ai_cache.clear()
+    _answer_cache.clear()
+
+    _reset_usage()
+
     _ext._init(_openai_client, _track_usage, logger)
+
+    if stop_event is not None and stop_event.is_set():
+        return
 
     applied_count = 0
 
     with sync_playwright() as p:
-        # Profile folder is keyed by email — each account gets its own session.
-        # Switching credentials in the UI automatically uses a different folder,
-        # so the old session is never touched.
         import hashlib
-        _email_slug = hashlib.md5((LINKEDIN_EMAIL or "").strip().lower().encode()).hexdigest()[:12]
+        _email_slug = hashlib.md5((_email() or "").strip().lower().encode()).hexdigest()[:12]
         _profile_dir = os.path.join(SCRIPT_DIR, f"linkedin_browser_profile_{_email_slug}")
         os.makedirs(_profile_dir, exist_ok=True)
 
@@ -7224,10 +7366,16 @@ def run_automation(profile: dict, logger=None) -> None:
 
             _log("Logged in — searching for jobs...", "info")
 
-            jobs = get_easy_apply_jobs(page, needed=MAX_APPLICATIONS)
-            _log(f"Found {len(jobs)} Easy Apply jobs (target: {MAX_APPLICATIONS})", "found")
+            jobs = get_easy_apply_jobs(page, needed=_max_apps())
+            _log(f"Found {len(jobs)} Easy Apply jobs (target: {_max_apps()})", "found")
 
-            for i, job in enumerate(jobs[:MAX_APPLICATIONS], start=1):
+            for i, job in enumerate(jobs[:_max_apps()], start=1):
+                # ── Termination check ─────────────────────────────────────────
+                if (stop_event is not None and stop_event.is_set()) or \
+                   (logger is not None and hasattr(logger, "is_active") and not logger.is_active):
+                    _log("Termination signal received. Stopping automation.", "warning")
+                    break
+
                 # ── Page recovery ─────────────────────────────────────────────
                 # LinkedIn's anti-bot detection or a popup/redirect during a
                 # previous application can silently close the page object.
@@ -7255,11 +7403,10 @@ def run_automation(profile: dict, logger=None) -> None:
                 if status == "applied":
                     applied_count += 1
                     if logger:
-                        logger.progress(applied_count, MAX_APPLICATIONS)
-                # Random delay between jobs — reduces automation detection risk
+                        logger.progress(applied_count, _max_apps())
                 time.sleep(random.uniform(2.0, 4.5))
 
-            summary = f"Done! {applied_count}/{MAX_APPLICATIONS} applications submitted."
+            summary = f"Done! {applied_count}/{_max_apps()} applications submitted."
             _log(summary, "success")
 
             # Send cost summary to the frontend
@@ -7280,11 +7427,9 @@ def run_automation(profile: dict, logger=None) -> None:
                 logger.fail(str(exc))
 
         finally:
-            # Stop the CDP screencast before closing the browser so Chrome
-            # can process the Page.stopScreencast command cleanly.
             screencaster.stop()
             context.close()
-            _logger = None
+            _tls.logger = None
 
 
 if __name__ == "__main__":

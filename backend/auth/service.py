@@ -25,7 +25,7 @@ from backend.auth.utils import (
 def _send_fresh_otp(cursor, conn, email: str, first_name: str) -> None:
     """Invalidate old OTPs for this email, create a new one, and send it."""
     otp     = generate_otp()
-    expires = datetime.now(timezone.utc) + timedelta(minutes=10)
+    expires = datetime.utcnow() + timedelta(minutes=5)
 
     cursor.execute(
         "UPDATE otp_codes SET used=TRUE WHERE email=%s AND used=FALSE",
@@ -82,19 +82,41 @@ def signup(
         conn.close()
 
 
+_MAX_OTP_ATTEMPTS = 5
+
+
 def verify_otp(email: str, otp_code: str) -> dict:
     conn   = get_connection()
     cursor = conn.cursor(dictionary=True)
     try:
+        # Fetch the latest unused OTP for this email regardless of code value
         cursor.execute(
             """SELECT * FROM otp_codes
-               WHERE email=%s AND otp_code=%s AND used=FALSE
+               WHERE email=%s AND used=FALSE
                ORDER BY created_at DESC LIMIT 1""",
-            (email, otp_code),
+            (email,),
         )
         row = cursor.fetchone()
 
         if not row:
+            raise HTTPException(status_code=400, detail="Invalid verification code.")
+
+        # Brute-force guard: too many wrong attempts → invalidate the OTP
+        attempts = (row.get("attempt_count") or 0)
+        if attempts >= _MAX_OTP_ATTEMPTS:
+            cursor.execute("UPDATE otp_codes SET used=TRUE WHERE id=%s", (row["id"],))
+            conn.commit()
+            raise HTTPException(
+                status_code=429,
+                detail="Too many incorrect attempts. Please request a new code.",
+            )
+
+        if row["otp_code"] != otp_code:
+            cursor.execute(
+                "UPDATE otp_codes SET attempt_count=attempt_count+1 WHERE id=%s",
+                (row["id"],),
+            )
+            conn.commit()
             raise HTTPException(status_code=400, detail="Invalid verification code.")
 
         # MySQL returns datetime without tzinfo; compare as naive UTC
@@ -207,6 +229,48 @@ def set_user_data_folder(user_id: int, folder_name: str) -> None:
             "UPDATE user_credentials SET data_folder=%s WHERE id=%s",
             (folder_name, user_id),
         )
+        conn.commit()
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def delete_account(user_id: int) -> None:
+    """
+    Permanently delete a user account and all associated data.
+    Steps:
+      1. Fetch email + data_folder from DB.
+      2. Delete the user's data folder from disk (CV, profile, PDF, etc.).
+      3. Delete all OTP codes for this email.
+      4. Delete the user row — ON DELETE CASCADE removes applied_jobs automatically.
+    """
+    import shutil
+    from pathlib import Path
+    from backend.config import USER_DATA_DIR
+
+    conn   = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT email, data_folder FROM user_credentials WHERE id=%s",
+            (user_id,),
+        )
+        user = cursor.fetchone()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found.")
+
+        # ── 1. Remove data folder from disk ───────────────────────────────────
+        if user.get("data_folder"):
+            folder = Path(USER_DATA_DIR) / user["data_folder"]
+            if folder.exists():
+                shutil.rmtree(folder)
+
+        # ── 2. Delete OTP codes (keyed by email, not user_id) ─────────────────
+        cursor.execute("DELETE FROM otp_codes WHERE email=%s", (user["email"],))
+
+        # ── 3. Delete the user row (CASCADE removes applied_jobs) ─────────────
+        cursor.execute("DELETE FROM user_credentials WHERE id=%s", (user_id,))
+
         conn.commit()
     finally:
         cursor.close()

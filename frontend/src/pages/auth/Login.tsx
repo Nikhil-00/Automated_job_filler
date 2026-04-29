@@ -5,6 +5,7 @@ import { Eye, EyeOff, Loader2, LogIn } from "lucide-react";
 import AnimatedBackground from "@/components/AnimatedBackground";
 import GlowButton from "@/components/GlowButton";
 import { login, setToken } from "@/lib/auth";
+import { getCVBuilder }  from "@/lib/cvBuilderApi";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -22,7 +23,12 @@ const Login = () => {
     try {
       const user = await login({ email, password });
       setToken(user.token);
-      navigate("/dashboard");
+      try {
+        await getCVBuilder();
+        navigate("/dashboard");
+      } catch {
+        navigate("/cv-builder");
+      }
     } catch (err: any) {
       setError(err.message ?? "Login failed. Please try again.");
     } finally {

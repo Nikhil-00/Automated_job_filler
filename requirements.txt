@@ -10,8 +10,20 @@ python-multipart
 
 # CV parsing
 pdfplumber
+python-doctr         # OCR for CV upload (needs torch or tf backend separately)
+
+# AI — CV Builder (Groq primary, OpenAI fallback already listed above)
+groq
+
+# ATS PDF generation
+reportlab
 
 # Auth
 mysql-connector-python
 bcrypt
 PyJWT
+
+# Job listings
+beautifulsoup4
+requests
+apscheduler

@@ -29,6 +29,10 @@ from backend.tools.session_logger import SessionLogger
 
 router = APIRouter(tags=["automation"])
 
+# Limit concurrent Playwright browser instances to prevent memory exhaustion.
+# Each headless Chromium uses ~150-200 MB; cap at 5 simultaneous runs.
+_browser_semaphore = threading.Semaphore(5)
+
 
 # ── Request models ─────────────────────────────────────────────────────────────
 
@@ -164,41 +168,42 @@ class _PersistingLogger(SessionLogger):
 
 # ── Workers ────────────────────────────────────────────────────────────────────
 
-def _linkedin_worker(req: StartAutomationRequest, profile: dict, logger: SessionLogger) -> None:
+def _linkedin_worker(req: StartAutomationRequest, profile: dict, logger: SessionLogger,
+                     stop_event: threading.Event) -> None:
     from backend.tools import linkedin_apply as la
 
-    la.LINKEDIN_EMAIL    = req.credentials.email
-    la.LINKEDIN_PASSWORD = req.credentials.password
-    la.JOB_SEARCH_QUERY  = req.filters.role or "Data Scientist"
-    la.JOB_LOCATION      = req.filters.location or "India"
-    la.MAX_APPLICATIONS  = req.count
-    la.EASY_APPLY_ONLY   = (req.filters.applyType == "easy_apply")
+    # Credentials and config are passed explicitly — never set module globals
+    # so concurrent runs for different users stay isolated.
+    run_kwargs = dict(
+        profile      = profile,
+        logger       = logger,
+        stop_event   = stop_event,
+        email        = req.credentials.email,
+        password     = req.credentials.password,
+        search_query = req.filters.role or "Data Scientist",
+        location     = req.filters.location or "India",
+        max_apps     = req.count,
+        easy_apply   = (req.filters.applyType == "easy_apply"),
+    )
 
-    # Persist merged profile to project root so standalone tools can still read it
-    try:
-        (PROJECT_ROOT / "profile.json").write_text(
-            json.dumps(profile, indent=2, ensure_ascii=False)
-        )
-    except Exception:
-        pass
-
-    try:
-        la.run_automation(profile, logger)
-    except Exception as exc:
-        err_str = str(exc)
-        # If the persistent browser profile caused a login failure, wipe it and retry once
-        if "login page could not be loaded" in err_str.lower() or "could not inject credentials" in err_str.lower():
-            _clear_linkedin_profiles(req.credentials.email, logger)
-            logger.warning("Stale browser profile detected — cleared. Retrying with a fresh session…")
-            try:
-                la.run_automation(profile, logger)
-                return
-            except Exception as exc2:
-                logger.error(f"Fatal (retry): {exc2}")
-                logger.fail(str(exc2))
-                return
-        logger.error(f"Fatal: {exc}")
-        logger.fail(str(exc))
+    # Acquire semaphore — blocks if 5 browsers are already running
+    with _browser_semaphore:
+        try:
+            la.run_automation(**run_kwargs)
+        except Exception as exc:
+            err_str = str(exc)
+            if "login page could not be loaded" in err_str.lower() or "could not inject credentials" in err_str.lower():
+                _clear_linkedin_profiles(req.credentials.email, logger)
+                logger.warning("Stale browser profile detected — cleared. Retrying with a fresh session…")
+                try:
+                    la.run_automation(**run_kwargs)
+                    return
+                except Exception as exc2:
+                    logger.error(f"Fatal (retry): {exc2}")
+                    logger.fail(str(exc2))
+                    return
+            logger.error(f"Fatal: {exc}")
+            logger.fail(str(exc))
 
 
 def _clear_linkedin_profiles(email: str, logger: SessionLogger | None = None) -> None:
@@ -218,10 +223,27 @@ def _clear_linkedin_profiles(email: str, logger: SessionLogger | None = None) ->
                     logger.warning(f"Could not delete {folder.name}: {e}")
 
 
-def _naukri_worker(req: StartAutomationRequest, profile: dict, logger: SessionLogger) -> None:
-    logger.info("Naukri automation starting...")
-    logger.warning("Naukri full automation is coming soon.")
-    logger.done("Naukri session ended.")
+def _naukri_worker(req: StartAutomationRequest, profile: dict, logger: SessionLogger,
+                   stop_event: threading.Event) -> None:
+    from backend.tools import naukri_apply as na
+
+    run_kwargs = dict(
+        profile      = profile,
+        logger       = logger,
+        stop_event   = stop_event,
+        email        = req.credentials.email,
+        password     = req.credentials.password,
+        search_query = req.filters.role or "Data Scientist",
+        location     = req.filters.location or "India",
+        max_apps     = req.count,
+    )
+
+    with _browser_semaphore:
+        try:
+            na.run_automation(**run_kwargs)
+        except Exception as exc:
+            logger.error(f"Fatal: {exc}")
+            logger.fail(str(exc))
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
@@ -235,14 +257,28 @@ async def start_automation(
     Kick off automation in a background thread.
     Logs stream to the browser via WebSocket at /ws/{req.sessionId}.
     """
-    with _sessions_lock:
-        if req.sessionId not in _sessions:
-            raise HTTPException(
-                status_code=400,
-                detail="WebSocket session not found. Connect to /ws/{sessionId} first.",
-            )
-
     user_id = int(user["sub"])
+    with _sessions_lock:
+        # Block if ANY session for this user+platform is already running.
+        # Keying on sessionId alone is insufficient because WebSocket reconnects
+        # create a new sessionId each time, bypassing the old guard.
+        for sid, state in _sessions.items():
+            if state.user_id == user_id and state.platform == req.platform and state.is_active:
+                return {"status": "already_running", "sessionId": sid}
+
+        if req.sessionId not in _sessions:
+            from backend.shared_state import SessionState
+            _sessions[req.sessionId] = SessionState(
+                queue=asyncio.Queue(),
+                user_id=user_id,
+                platform=req.platform
+            )
+        else:
+            state = _sessions[req.sessionId]
+            state.user_id = user_id
+            state.platform = req.platform
+            state.is_active = True
+
     base    = _load_user_profile(user_id)
     profile = _merge_profile(req, base)
 
@@ -250,8 +286,65 @@ async def start_automation(
     logger = _PersistingLogger(req.sessionId, loop, user_id, req.platform, req.filters)
     target = _linkedin_worker if req.platform == "linkedin" else _naukri_worker
 
-    threading.Thread(target=target, args=(req, profile, logger), daemon=True).start()
+    # Create a fresh Event per run so a stale set() from a previous run can
+    # never bleed into this one, and so wrapped_worker's finally closure
+    # modifies the exact session state object it started with.
+    new_stop_event = threading.Event()
+    with _sessions_lock:
+        _sessions[req.sessionId].stop_event = new_stop_event
+        captured_state = _sessions[req.sessionId]
+    stop_event = new_stop_event
+
+    def wrapped_worker(*args, **kwargs):
+        try:
+            target(*args, **kwargs)
+        finally:
+            captured_state.is_active = False
+
+    threading.Thread(target=wrapped_worker, args=(req, profile, logger, stop_event), daemon=True).start()
     return {"status": "started", "sessionId": req.sessionId}
+
+
+@router.post("/api/automation/stop")
+async def stop_automation(
+    platform_data: dict,
+    user: dict = Depends(get_current_user)
+):
+    """
+    Stops an active automation session.
+    """
+    platform = platform_data.get("platform")
+    user_id = int(user["sub"])
+
+    with _sessions_lock:
+        to_remove = []
+        for sid, state in _sessions.items():
+            if state.user_id == user_id and state.platform == platform:
+                state.is_active = False
+                state.stop_event.set()   # signal the worker thread to exit
+                to_remove.append(sid)
+
+        for sid in to_remove:
+            del _sessions[sid]
+
+    return {"status": "stopped"}
+
+
+@router.get("/api/automation/active-session/{platform}")
+async def get_active_session(
+    platform: str,
+    user: dict = Depends(get_current_user),
+):
+    """
+    Check if there is an ongoing automation for this user and platform.
+    Allows the frontend to re-attach after a page reload.
+    """
+    user_id = int(user["sub"])
+    with _sessions_lock:
+        for sid, state in _sessions.items():
+            if state.user_id == user_id and state.platform == platform and state.is_active:
+                return {"sessionId": sid, "status": "active"}
+    return {"sessionId": None, "status": "none"}
 
 
 class _PrintLogger:
@@ -284,13 +377,11 @@ def _verify_linkedin_credentials(email: str, password: str) -> dict:
     from playwright.sync_api import sync_playwright
     from backend.tools import linkedin_apply as la
 
-    la.LINKEDIN_EMAIL    = email
-    la.LINKEDIN_PASSWORD = password
-
-    # Set a real logger so linkedin_apply never calls input() — which would
-    # block the thread-pool worker indefinitely in a server context.
-    _prev_logger  = la._logger
-    la._logger    = _PrintLogger()
+    # Set credentials and logger via thread-locals (not module globals)
+    from backend.tools.linkedin_apply import _tls as _la_tls
+    _la_tls.email    = email
+    _la_tls.password = password
+    _la_tls.logger   = _PrintLogger()
 
     result = {"status": "failed", "message": "Could not open browser."}
     try:
@@ -367,7 +458,65 @@ def _verify_linkedin_credentials(email: str, password: str) -> dict:
     except Exception as exc:
         result = {"status": "failed", "message": f"Browser error: {exc}"}
     finally:
-        la._logger = _prev_logger   # always restore
+        _la_tls.logger = None
+
+    return result
+
+
+def _verify_naukri_credentials(email: str, password: str) -> dict:
+    """Open a visible browser, attempt Naukri login, and return status."""
+    from playwright.sync_api import sync_playwright
+    from backend.tools import naukri_apply as na
+
+    na._tls.email    = email
+    na._tls.password = password
+    na._tls.logger   = _PrintLogger()
+
+    result = {"status": "failed", "message": "Could not open browser."}
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(
+                headless=False,
+                args=[
+                    "--no-sandbox",
+                    "--disable-blink-features=AutomationControlled",
+                    "--disable-dev-shm-usage",
+                    "--start-maximized",
+                ],
+            )
+            context = browser.new_context(
+                viewport={"width": 1366, "height": 768},
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/120.0.0.0 Safari/537.36"
+                ),
+            )
+            page   = context.new_page()
+            status = na.login_naukri(page)
+
+            if status == "success":
+                result = {"status": "success", "message": "Naukri login successful!"}
+            elif status == "wrong_credentials":
+                result = {
+                    "status":  "wrong_credentials",
+                    "message": "Wrong email or password. Please check your Naukri credentials.",
+                }
+            else:
+                result = {
+                    "status":  "failed",
+                    "message": "Naukri login page could not be loaded. Check your internet connection.",
+                }
+
+            try:
+                browser.close()
+            except Exception:
+                pass
+
+    except Exception as exc:
+        result = {"status": "failed", "message": f"Browser error: {exc}"}
+    finally:
+        na._tls.logger = None
 
     return result
 
@@ -381,10 +530,15 @@ async def verify_credentials(
     if not req.email or not req.password:
         raise HTTPException(status_code=400, detail="Email and password are required.")
 
-    loop   = asyncio.get_running_loop()
-    result = await loop.run_in_executor(
-        None, _verify_linkedin_credentials, req.email, req.password
-    )
+    loop = asyncio.get_running_loop()
+    if req.platform == "naukri":
+        result = await loop.run_in_executor(
+            None, _verify_naukri_credentials, req.email, req.password
+        )
+    else:
+        result = await loop.run_in_executor(
+            None, _verify_linkedin_credentials, req.email, req.password
+        )
 
     if result["status"] == "wrong_credentials":
         raise HTTPException(status_code=401, detail=result["message"])

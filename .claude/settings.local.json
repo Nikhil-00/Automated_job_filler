@@ -25,7 +25,28 @@
       "Bash(py --version)",
       "Bash(python3 -m pip install mysql-connector-python bcrypt PyJWT)",
       "Bash(uv pip:*)",
-      "Bash(xargs grep *)"
+      "Bash(xargs grep *)",
+      "Bash(conda run *)",
+      "Bash(C:/Users/nikhi/OneDrive/Desktop/Ai job filler/.venv/Scripts/python.exe *)",
+      "WebFetch(domain:careers.ey.com)",
+      "Bash(\"C:/Users/nikhi/OneDrive/Desktop/Ai job *)",
+      "Bash(.venv/Scripts/python.exe -c \"import sys; print\\(sys.executable\\); print\\(sys.version\\)\")",
+      "Bash(curl -sS https://bootstrap.pypa.io/get-pip.py)",
+      "Bash(.venv/Scripts/python.exe -)",
+      "Bash(.venv/Scripts/python.exe -m pip install beautifulsoup4)",
+      "Bash(head -5 ey_india_jobs.csv)",
+      "Bash(wc -l ey_india_jobs.csv)",
+      "Bash(cat requirements.txt)",
+      "Bash(.venv/Scripts/python.exe -c \"import apscheduler; print\\('apscheduler ok'\\)\")",
+      "Bash(.venv/Scripts/python.exe -c \"import requests; print\\('requests ok'\\)\")",
+      "Bash(.venv/Scripts/python.exe -m pip install apscheduler requests)",
+      "Bash(.venv/Scripts/python.exe -c ' *)",
+      "Bash(grep -n \"_logger is None\\\\|_logger is not None\\\\|_logger = \\\\|= _logger$\" \"C:/Users/nikhi/OneDrive/Desktop/Ai job filler/backend/tools/linkedin_apply.py\")",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:www.naukri.com)",
+      "Bash(python -c ' *)",
+      "WebFetch(domain:www.linkedin.com)",
+      "WebFetch(domain:support.greenhouse.io)"
     ]
   }
 }
