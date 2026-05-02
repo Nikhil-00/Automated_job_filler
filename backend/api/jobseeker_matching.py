@@ -149,14 +149,14 @@ def activate(body: ActivateRequest, user: dict = Depends(_get_user)):
             """
             INSERT INTO candidate_profile
                 (user_id, years_experience, expected_ctc, skills, cv_summary, current_job_title, is_active)
-            VALUES (%s, %s, %s, %s, %s, %s, 1)
-            ON DUPLICATE KEY UPDATE
-                years_experience  = VALUES(years_experience),
-                expected_ctc      = VALUES(expected_ctc),
-                skills            = VALUES(skills),
-                cv_summary        = VALUES(cv_summary),
-                current_job_title = VALUES(current_job_title),
-                is_active         = 1
+            VALUES (%s, %s, %s, %s, %s, %s, TRUE)
+            ON CONFLICT (user_id) DO UPDATE SET
+                years_experience  = EXCLUDED.years_experience,
+                expected_ctc      = EXCLUDED.expected_ctc,
+                skills            = EXCLUDED.skills,
+                cv_summary        = EXCLUDED.cv_summary,
+                current_job_title = EXCLUDED.current_job_title,
+                is_active         = TRUE
             """,
             (user_id, years_exp, expected_ctc, skills_json, cv_summary, current_title),
         )
@@ -167,6 +167,14 @@ def activate(body: ActivateRequest, user: dict = Depends(_get_user)):
                 (user_id, role),
             )
         conn.commit()
+
+        # ── Update Vector Store ───────────────────────────────────────────────
+        try:
+            from backend.utils.vector_store import upsert_candidate
+            upsert_candidate(user_id, cv_summary, skills_list)
+        except Exception as v_exc:
+            _log.warning("Vector store update failed for user %s: %s", user_id, v_exc)
+
     finally:
         cur.close()
         conn.close()
@@ -213,7 +221,7 @@ def deactivate(user: dict = Depends(_get_user)):
     conn = get_connection()
     cur  = conn.cursor()
     try:
-        cur.execute("UPDATE candidate_profile SET is_active = 0 WHERE user_id = %s", (user_id,))
+        cur.execute("UPDATE candidate_profile SET is_active = FALSE WHERE user_id = %s", (user_id,))
         conn.commit()
     finally:
         cur.close()

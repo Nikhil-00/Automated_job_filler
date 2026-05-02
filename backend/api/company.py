@@ -267,6 +267,7 @@ class SignupRequest(BaseModel):
     officer_name: str
     email:        str
     phone:        str
+    password:     str
 
 
 class PostJobRequest(BaseModel):
@@ -306,6 +307,16 @@ class ResendOtpRequest(BaseModel):
     email: str
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(BaseModel):
+    email:        str
+    otp_code:     str
+    new_password: str
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/signup")
@@ -315,6 +326,9 @@ def company_signup(req: SignupRequest):
     If email already exists but unverified — resend OTP.
     If already verified — reject with 409.
     """
+    # Hash password immediately
+    hashed_pw = bcrypt.hashpw(req.password.encode(), bcrypt.gensalt()).decode()
+
     conn = get_connection()
     cur  = conn.cursor(dictionary=True)
     try:
@@ -335,15 +349,18 @@ def company_signup(req: SignupRequest):
 
         if existing and not existing["is_otp_verified"]:
             cur.execute(
-                "UPDATE company_requests SET company_name=%s, officer_name=%s, phone=%s, otp_code=%s, otp_expires_at=%s WHERE id=%s",
-                (req.company_name, req.officer_name, req.phone, otp, expires, existing["id"]),
+                """UPDATE company_requests 
+                   SET company_name=%s, officer_name=%s, phone=%s, otp_code=%s, 
+                       otp_expires_at=%s, assigned_email=%s, assigned_password=%s 
+                   WHERE id=%s""",
+                (req.company_name, req.officer_name, req.phone, otp, expires, req.email, hashed_pw, existing["id"]),
             )
         else:
             cur.execute(
                 """INSERT INTO company_requests
-                   (company_name, officer_name, email, phone, otp_code, otp_expires_at)
-                   VALUES (%s, %s, %s, %s, %s, %s)""",
-                (req.company_name, req.officer_name, req.email, req.phone, otp, expires),
+                   (company_name, officer_name, email, phone, otp_code, otp_expires_at, assigned_email, assigned_password)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                (req.company_name, req.officer_name, req.email, req.phone, otp, expires, req.email, hashed_pw),
             )
 
         conn.commit()
@@ -391,39 +408,20 @@ def company_verify_otp(req: VerifyOtpRequest):
         if now > row["otp_expires_at"]:
             raise HTTPException(status_code=400, detail="OTP has expired. Please request a new one.")
 
-        # Auto-approve: generate credentials immediately
-        plain_pw = secrets.token_urlsafe(12)
-        hashed   = bcrypt.hashpw(plain_pw.encode(), bcrypt.gensalt()).decode()
+        # Auto-approve: Mark as verified and approved
         cur.execute(
             """UPDATE company_requests
-               SET is_otp_verified=1, otp_code=NULL,
-                   assigned_email=%s, assigned_password=%s, status='approved'
+               SET is_otp_verified=TRUE, otp_code=NULL, status='approved'
                WHERE id=%s""",
-            (row["email"], hashed, row["id"]),
+            (row["id"],),
         )
         conn.commit()
-        company    = dict(row)
-        auto_creds = (row["email"], plain_pw)
     finally:
         cur.close()
         conn.close()
 
-    try:
-        _send_email(
-            auto_creds[0],
-            "AutoApply AI — Your Company Portal Credentials",
-            _credentials_email_html(
-                company["officer_name"],
-                company["company_name"],
-                auto_creds[0],
-                auto_creds[1],
-            ),
-        )
-    except Exception:
-        pass
-
     return {
-        "message":      "Email verified. Your portal is ready — check your inbox for login credentials.",
+        "message":      "Email verified. Your portal is ready — you can now log in with your password.",
         "auto_approved": True,
     }
 
@@ -511,6 +509,86 @@ def company_login(req: LoginRequest):
         "officer_name": company["officer_name"],
         "email":        company["assigned_email"],
     }
+
+
+@router.post("/forgot-password")
+def company_forgot_password(req: ForgotPasswordRequest):
+    """
+    Send OTP for password reset if the company is already approved/active.
+    """
+    conn = get_connection()
+    cur  = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            "SELECT id, officer_name, company_name FROM company_requests WHERE assigned_email = %s AND status='approved' LIMIT 1",
+            (req.email,),
+        )
+        row = cur.fetchone()
+        if not row:
+            # Silence failure for security
+            return {"message": "If this email is registered, you will receive a reset code."}
+
+        otp     = _generate_otp()
+        expires = (datetime.utcnow() + timedelta(minutes=10)).strftime("%Y-%m-%d %H:%M:%S")
+
+        cur.execute(
+            "UPDATE company_requests SET otp_code=%s, otp_expires_at=%s WHERE id=%s",
+            (otp, expires, row["id"]),
+        )
+        conn.commit()
+        company = dict(row)
+    finally:
+        cur.close()
+        conn.close()
+
+    try:
+        _send_email(
+            req.email,
+            "AutoApply AI — Company Password Reset Code",
+            _otp_email_html(company["officer_name"], company["company_name"], otp),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to send OTP: {e}")
+
+    return {"message": "Reset code sent to your email."}
+
+
+@router.post("/reset-password")
+def company_reset_password(req: ResetPasswordRequest):
+    """
+    Verify reset OTP and update assigned_password.
+    """
+    # Hash new password
+    hashed = bcrypt.hashpw(req.new_password.encode(), bcrypt.gensalt()).decode()
+
+    conn = get_connection()
+    cur  = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            "SELECT id, otp_code, otp_expires_at FROM company_requests WHERE assigned_email = %s AND status='approved' LIMIT 1",
+            (req.email,),
+        )
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Email not found.")
+
+        if not row["otp_code"] or row["otp_code"] != req.otp_code:
+            raise HTTPException(status_code=400, detail="Invalid reset code.")
+
+        if datetime.utcnow() > row["otp_expires_at"]:
+            raise HTTPException(status_code=400, detail="Reset code has expired.")
+
+        # Update password and clear OTP
+        cur.execute(
+            "UPDATE company_requests SET assigned_password=%s, otp_code=NULL WHERE id=%s",
+            (hashed, row["id"]),
+        )
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+
+    return {"message": "Password reset successfully. You can now log in."}
 
 
 # ── CV download ───────────────────────────────────────────────────────────────
@@ -1177,11 +1255,23 @@ def post_job(body: PostJobRequest, company: dict = Depends(get_company_user)):
         cur.close()
         conn.close()
 
-    # Trigger candidate matching in background
-    def _match():
-        from backend.services.candidate_matching import run_matching
-        run_matching(job_id)
-    threading.Thread(target=_match, daemon=True).start()
+    # Trigger candidate matching + Job Vectorization in background
+    def _background_tasks():
+        # 1. Generate AI vector for the job itself
+        try:
+            from backend.utils.vector_store import upsert_job_vector
+            upsert_job_vector(job_id, body.title, body.description)
+        except Exception as e:
+            _log.error("Job vectorization failed: %s", e)
+
+        # 2. Match existing candidates to this new job
+        try:
+            from backend.services.candidate_matching import run_matching
+            run_matching(job_id)
+        except Exception as e:
+            _log.error("Initial candidate matching failed: %s", e)
+
+    threading.Thread(target=_background_tasks, daemon=True).start()
 
     return {"job_id": job_id, "message": "Job posted successfully."}
 
@@ -1264,7 +1354,7 @@ def update_job_status(
             raise HTTPException(status_code=404, detail="Job not found.")
         cur.execute(
             "UPDATE job_postings SET is_active = %s WHERE id = %s",
-            (1 if body.is_active else 0, job_id),
+            (body.is_active, job_id),
         )
         conn.commit()
     finally:
@@ -1426,7 +1516,7 @@ def re_run_matching(job_id: str, company: dict = Depends(get_company_user)):
     cur  = conn.cursor(dictionary=True)
     try:
         cur.execute(
-            "SELECT id FROM job_postings WHERE id = %s AND company_id = %s AND is_active = 1",
+            "SELECT id FROM job_postings WHERE id = %s AND company_id = %s AND is_active = TRUE",
             (job_id, company_id),
         )
         if not cur.fetchone():
@@ -1486,7 +1576,7 @@ def get_portal_applicants(
 
     _PORTAL_SORT = {
         "recent":     "ja.applied_at DESC",
-        "score_high": "ISNULL(ja.ai_match_score), ja.ai_match_score DESC",
+        "score_high": "ja.ai_match_score IS NULL, ja.ai_match_score DESC",
         "score_low":  "ja.ai_match_score IS NOT NULL, ja.ai_match_score ASC",
         "name":       "uc.first_name ASC, uc.last_name ASC",
     }
@@ -2227,10 +2317,27 @@ def _tool_get_candidates(args: dict) -> dict:
     req_skills   = [s.lower().strip() for s in (filters.get("skills") or [])]
     edu_keywords = [k.lower().strip() for k in (filters.get("education_keywords") or [])]
 
+    # If a query is provided, use semantic search to find candidate IDs first
+    semantic_matches: dict[int, float] = {}
+    if query and not candidate_ids:
+        try:
+            from backend.utils.vector_store import search_candidates
+            results = search_candidates(query, limit=100)
+            semantic_matches = {cid: score for cid, score in results}
+            _log.info("Semantic search for '%s' returned %d results", query, len(semantic_matches))
+        except Exception as v_exc:
+            _log.warning("Semantic search failed in tool: %s", v_exc)
+
     results = []
     for cand in candidates:
+        user_id = cand["user_id"]
+        
+        # If we have semantic results, and this candidate isn't in them, skip (unless query is name match)
         full_name = f"{cand['first_name']} {cand['last_name']}".lower()
-        if query and query not in full_name:
+        if semantic_matches and user_id not in semantic_matches and query not in full_name:
+            continue
+        
+        if query and not semantic_matches and query not in full_name:
             continue
 
         cv            = _load_cv_data(cand.get("data_folder") or "", cv_cache)
@@ -2533,7 +2640,7 @@ def get_agentic_jobs(company: dict = Depends(get_company_user)):
         cur.execute(
             """
             SELECT jp.id, jp.title, jp.location,
-                   IF(jp.is_active=1,'active','closed') AS status,
+                   CASE WHEN jp.is_active=TRUE THEN 'active' ELSE 'closed' END AS status,
                    jp.created_at,
                    (SELECT COUNT(*) FROM job_applications    WHERE job_id = jp.id) +
                    (SELECT COUNT(*) FROM candidate_job_matches WHERE job_id = jp.id) AS applicant_count
@@ -2805,9 +2912,12 @@ def send_agentic_email(
     cur  = conn.cursor()
     try:
         cur.execute(
-            "INSERT IGNORE INTO email_logs "
-            "(candidate_id, job_id, email_type, recruiter_id, sent_at) "
-            "VALUES (%s, %s, %s, %s, %s)",
+            """
+            INSERT INTO email_logs 
+            (candidate_id, job_id, email_type, recruiter_id, sent_at) 
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT DO NOTHING
+            """,
             (body.candidate_id, body.job_id, body.email_type, company_id, now),
         )
         # Keep application status in sync with the email action

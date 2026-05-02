@@ -7,7 +7,7 @@ import NonBig4Dashboard from "./NonBig4Dashboard";
 
 const API = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
-type Tab = "login" | "signup";
+type Tab = "login" | "signup" | "forgot";
 type Step = "form" | "otp" | "done";
 
 const cls = "w-full px-4 py-2.5 rounded-lg bg-input border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-yellow-500/50 transition text-sm";
@@ -21,6 +21,7 @@ interface DashboardState {
 export default function CompanyPortal() {
   const [tab,       setTab]       = useState<Tab>("signup");
   const [dashboard, setDashboard] = useState<DashboardState | null>(null);
+  const [forgotEmail, setForgotEmail] = useState("");
 
   if (dashboard) {
     return (
@@ -54,31 +55,47 @@ export default function CompanyPortal() {
 
         <div className="glass-card rounded-2xl overflow-hidden">
           {/* Tab switcher */}
-          <div className="flex border-b border-border">
-            {(["signup", "login"] as Tab[]).map((t) => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`flex-1 py-3 text-sm font-semibold transition-colors
-                  ${tab === t
-                    ? "text-yellow-400 border-b-2 border-yellow-400 bg-yellow-500/5"
-                    : "text-muted-foreground hover:text-foreground"
-                  }`}
-              >
-                {t === "signup"
-                  ? <span className="flex items-center justify-center gap-1.5"><UserPlus className="w-4 h-4" />Register</span>
-                  : <span className="flex items-center justify-center gap-1.5"><LogIn className="w-4 h-4" />Login</span>
-                }
-              </button>
-            ))}
-          </div>
+          {tab !== "forgot" && (
+            <div className="flex border-b border-border">
+              {(["signup", "login"] as Tab[]).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTab(t)}
+                  className={`flex-1 py-3 text-sm font-semibold transition-colors
+                    ${tab === t
+                      ? "text-yellow-400 border-b-2 border-yellow-400 bg-yellow-500/5"
+                      : "text-muted-foreground hover:text-foreground"
+                    }`}
+                >
+                  {t === "signup"
+                    ? <span className="flex items-center justify-center gap-1.5"><UserPlus className="w-4 h-4" />Register</span>
+                    : <span className="flex items-center justify-center gap-1.5"><LogIn className="w-4 h-4" />Login</span>
+                  }
+                </button>
+              ))}
+            </div>
+          )}
 
           <div className="p-7">
             <AnimatePresence mode="wait">
-              {tab === "signup"
-                ? <SignupFlow key="signup" />
-                : <LoginForm key="login" onDashboard={setDashboard} />
-              }
+              {tab === "signup" && <SignupFlow key="signup" />}
+              {tab === "login" && (
+                <LoginForm
+                  key="login"
+                  onDashboard={setDashboard}
+                  onForgotPassword={(email) => {
+                    setForgotEmail(email);
+                    setTab("forgot");
+                  }}
+                />
+              )}
+              {tab === "forgot" && (
+                <ForgotFlow
+                  key="forgot"
+                  initialEmail={forgotEmail}
+                  onBack={() => setTab("login")}
+                />
+              )}
             </AnimatePresence>
           </div>
         </div>
@@ -97,6 +114,8 @@ function SignupFlow() {
   const [email,        setEmail]        = useState("");
   const [phone,        setPhone]        = useState("");
   const [otp,          setOtp]          = useState("");
+  const [password,     setPassword]     = useState("");
+  const [showPass,     setShowPass]     = useState(false);
   const [loading,      setLoading]      = useState(false);
   const [error,        setError]        = useState("");
   const [resending,    setResending]    = useState(false);
@@ -104,6 +123,7 @@ function SignupFlow() {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!companyName.trim()) { setError("Please enter your company name."); return; }
+    if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
     setError(""); setLoading(true);
     try {
       const res = await fetch(`${API}/api/company/signup`, {
@@ -114,6 +134,7 @@ function SignupFlow() {
           officer_name: officerName,
           email,
           phone,
+          password,
         }),
       });
       const data = await res.json();
@@ -185,10 +206,17 @@ function SignupFlow() {
               className={cls}
             />
           </div>
-          <div>
-            <label className="block text-xs text-muted-foreground mb-1">Officer Name</label>
-            <input value={officerName} onChange={e => setOfficerName(e.target.value)}
-              required placeholder="John Smith" className={cls} />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Officer Name</label>
+              <input value={officerName} onChange={e => setOfficerName(e.target.value)}
+                required placeholder="John Smith" className={cls} />
+            </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Phone Number</label>
+              <input type="tel" value={phone} onChange={e => setPhone(e.target.value)}
+                required placeholder="+91 98765 43210" className={cls} />
+            </div>
           </div>
           <div>
             <label className="block text-xs text-muted-foreground mb-1">Work Email</label>
@@ -196,9 +224,24 @@ function SignupFlow() {
               required placeholder="officer@company.com" className={cls} />
           </div>
           <div>
-            <label className="block text-xs text-muted-foreground mb-1">Phone Number</label>
-            <input type="tel" value={phone} onChange={e => setPhone(e.target.value)}
-              required placeholder="+91 98765 43210" className={cls} />
+            <label className="block text-xs text-muted-foreground mb-1">Set Password</label>
+            <div className="relative">
+              <input
+                type={showPass ? "text" : "password"}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                placeholder="Minimum 6 characters"
+                className={`${cls} pr-10`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPass(!showPass)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
 
           {error && <ErrorBox msg={error} />}
@@ -255,15 +298,18 @@ function SignupFlow() {
       {/* ── Step: done ── */}
       {step === "done" && (
         <div className="text-center py-4 space-y-3">
-          <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto bg-blue-500/20 border border-blue-500/40">
-            <Mail className="w-7 h-7 text-blue-400" />
+          <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto bg-green-500/20 border border-green-500/40">
+            <CheckCircle className="w-7 h-7 text-green-400" />
           </div>
           <h3 className="text-lg font-bold text-foreground">Portal Ready!</h3>
           <p className="text-sm text-muted-foreground">
-            Your company portal has been <span className="text-blue-400 font-medium">approved</span>.
-            Check <span className="text-foreground font-medium">{email}</span> for your login credentials.
-            You can log in right away!
+            Your company portal has been <span className="text-green-400 font-medium">activated</span>.
+            You can now log in using your email and the password you just set.
           </p>
+          <GlowButton onClick={() => window.location.reload()} className="w-full mt-4"
+            style={{ background: "linear-gradient(135deg,#ca8a04,#eab308)" }}>
+            Go to Login
+          </GlowButton>
         </div>
       )}
     </motion.div>
@@ -273,7 +319,10 @@ function SignupFlow() {
 
 // ── Login ─────────────────────────────────────────────────────────────────────
 
-function LoginForm({ onDashboard }: { onDashboard: (d: DashboardState) => void }) {
+function LoginForm({ onDashboard, onForgotPassword }: {
+  onDashboard: (d: DashboardState) => void;
+  onForgotPassword: (email: string) => void;
+}) {
   const [email,    setEmail]    = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
@@ -318,7 +367,16 @@ function LoginForm({ onDashboard }: { onDashboard: (d: DashboardState) => void }
             required placeholder="name.company@autofill.com" className={cls} />
         </div>
         <div>
-          <label className="block text-xs text-muted-foreground mb-1">Password</label>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-xs text-muted-foreground">Password</label>
+            <button
+              type="button"
+              onClick={() => onForgotPassword(email)}
+              className="text-xs text-yellow-400 hover:underline"
+            >
+              Forgot Password?
+            </button>
+          </div>
           <div className="relative">
             <input type={showPass ? "text" : "password"} value={password}
               onChange={e => setPassword(e.target.value)}
@@ -340,6 +398,149 @@ function LoginForm({ onDashboard }: { onDashboard: (d: DashboardState) => void }
           }
         </GlowButton>
       </form>
+    </motion.div>
+  );
+}
+
+
+// ── Forgot Password flow ──────────────────────────────────────────────────────
+
+function ForgotFlow({ initialEmail, onBack }: { initialEmail: string; onBack: () => void }) {
+  const [step,         setStep]        = useState<"email" | "otp" | "reset" | "done">("email");
+  const [email,        setEmail]       = useState(initialEmail);
+  const [otp,          setOtp]         = useState("");
+  const [newPass,      setNewPass]     = useState("");
+  const [confirmPass,  setConfirmPass] = useState("");
+  const [loading,      setLoading]     = useState(false);
+  const [error,        setError]       = useState("");
+  const [showPass,     setShowPass]    = useState(false);
+
+  const handleSendOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(""); setLoading(true);
+    try {
+      const res = await fetch(`${API}/api/company/forgot-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? "Failed to send code.");
+      setStep("otp");
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStep("reset");
+  };
+
+  const handleReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPass !== confirmPass) { setError("Passwords do not match."); return; }
+    if (newPass.length < 6) { setError("Password must be at least 6 characters."); return; }
+
+    setError(""); setLoading(true);
+    try {
+      const res = await fetch(`${API}/api/company/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, otp_code: otp, new_password: newPass }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? "Reset failed.");
+      setStep("done");
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <motion.div
+      key={step}
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      transition={{ duration: 0.25 }}
+      className="space-y-4"
+    >
+      <button onClick={onBack} className="text-xs text-muted-foreground hover:text-foreground mb-2">
+        ← Back to login
+      </button>
+
+      {step === "email" && (
+        <form onSubmit={handleSendOtp} className="space-y-4">
+          <h2 className="text-base font-semibold text-foreground">Reset Password</h2>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Enter your email address and we'll send you a 6-digit code to reset your password.
+          </p>
+          <div>
+            <label className="block text-xs text-muted-foreground mb-1">Work Email</label>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+              required placeholder="officer@company.com" className={cls} />
+          </div>
+          {error && <ErrorBox msg={error} />}
+          <GlowButton type="submit" disabled={loading} className="w-full">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : "Send Reset Code"}
+          </GlowButton>
+        </form>
+      )}
+
+      {step === "otp" && (
+        <form onSubmit={handleVerify} className="space-y-4">
+          <h2 className="text-base font-semibold text-foreground text-center">Verify Code</h2>
+          <p className="text-xs text-muted-foreground text-center">Code sent to {email}</p>
+          <input
+            value={otp}
+            onChange={e => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            required maxLength={6}
+            placeholder="123456"
+            className={`${cls} text-center text-2xl font-bold tracking-widest`}
+          />
+          <GlowButton type="submit" className="w-full">Continue</GlowButton>
+        </form>
+      )}
+
+      {step === "reset" && (
+        <form onSubmit={handleReset} className="space-y-4">
+          <h2 className="text-base font-semibold text-foreground">Set New Password</h2>
+          <div>
+            <label className="block text-xs text-muted-foreground mb-1">New Password</label>
+            <div className="relative">
+              <input type={showPass ? "text" : "password"} value={newPass}
+                onChange={e => setNewPass(e.target.value)} required className={cls} />
+              <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-3 top-1/2 -translate-y-1/2">
+                {showPass ? <EyeOff className="w-4 h-4 text-muted-foreground" /> : <Eye className="w-4 h-4 text-muted-foreground" />}
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs text-muted-foreground mb-1">Confirm New Password</label>
+            <input type="password" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} required className={cls} />
+          </div>
+          {error && <ErrorBox msg={error} />}
+          <GlowButton type="submit" disabled={loading} className="w-full">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : "Update Password"}
+          </GlowButton>
+        </form>
+      )}
+
+      {step === "done" && (
+        <div className="text-center py-4 space-y-3">
+          <div className="w-12 h-12 rounded-full bg-green-500/20 border border-green-500/40 flex items-center justify-center mx-auto">
+            <CheckCircle className="w-6 h-6 text-green-400" />
+          </div>
+          <h3 className="font-bold text-foreground">Password Reset!</h3>
+          <p className="text-xs text-muted-foreground">Your password has been updated. You can now log in.</p>
+          <GlowButton onClick={onBack} className="w-full mt-2">Back to Login</GlowButton>
+        </div>
+      )}
     </motion.div>
   );
 }

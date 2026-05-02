@@ -84,7 +84,7 @@ def get_applied_jobs(user: dict = Depends(get_current_user)):
                 aj.applied_at,
                 aj.session_role,
                 aj.session_location,
-                aj.job_index  AS `index`,
+                aj.job_index  AS index,
                 aj.title,
                 aj.company,
                 aj.location,

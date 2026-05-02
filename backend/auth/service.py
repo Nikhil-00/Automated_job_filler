@@ -275,3 +275,57 @@ def delete_account(user_id: int) -> None:
     finally:
         cursor.close()
         conn.close()
+
+def forgot_password(email: str) -> dict:
+    conn   = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT first_name FROM user_credentials WHERE email=%s", (email,)
+        )
+        user = cursor.fetchone()
+        if not user:
+            # For security, we don't reveal if the email exists.
+            # But the requirement says "mail send to his email", so we should only send if it exists.
+            return {"message": "If this email is registered, you will receive a verification code."}
+
+        _send_fresh_otp(cursor, conn, email, user["first_name"])
+        return {"message": "Verification code sent to your email."}
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def reset_password(email: str, otp_code: str, new_password: str) -> dict:
+    conn   = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # Verify OTP
+        cursor.execute(
+            """SELECT * FROM otp_codes
+               WHERE email=%s AND used=FALSE
+               ORDER BY created_at DESC LIMIT 1""",
+            (email,),
+        )
+        row = cursor.fetchone()
+
+        if not row or row["otp_code"] != otp_code:
+            raise HTTPException(status_code=400, detail="Invalid verification code.")
+
+        if datetime.utcnow() > row["expires_at"]:
+            raise HTTPException(status_code=400, detail="Code has expired.")
+
+        # Update password
+        hashed = hash_password(new_password)
+        cursor.execute(
+            "UPDATE user_credentials SET password_hash=%s WHERE email=%s",
+            (hashed, email),
+        )
+        # Invalidate OTP
+        cursor.execute("UPDATE otp_codes SET used=TRUE WHERE id=%s", (row["id"],))
+        conn.commit()
+
+        return {"message": "Password reset successfully. You can now log in."}
+    finally:
+        cursor.close()
+        conn.close()

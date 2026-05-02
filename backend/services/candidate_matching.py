@@ -39,7 +39,7 @@ def run_matching(job_id: str) -> None:
             cur.execute(
                 """SELECT id, title, description, experience_min, experience_max,
                           salary_max, salary_currency
-                   FROM job_postings WHERE id = %s AND is_active = 1""",
+                   FROM job_postings WHERE id = %s AND is_active = TRUE""",
                 (job_id,),
             )
             job = cur.fetchone()
@@ -50,34 +50,39 @@ def run_matching(job_id: str) -> None:
         if not job:
             return
 
-        words = _title_words(job["title"])
-        if not words:
+        # 2. Semantic Search: Find candidates by meaning, not just keywords
+        try:
+            from backend.utils.vector_store import search_candidates
+            results = search_candidates(job["title"], limit=150)
+            candidate_ids = [cid for cid, score in results]
+        except Exception as v_exc:
+            _log.error("[matching] semantic search failed: %s", v_exc)
             return
 
-        # 2. SQL filter: role keyword match only — experience/CTC handled by AI scorer
-        like_conditions = " OR ".join(["ctr.job_title LIKE %s"] * len(words))
-        like_params = [f"%{w}%" for w in words]
+        if not candidate_ids:
+            _log.info("[matching] no candidates found via semantic search for job %s", job_id)
+            return
 
-        _log.info("[matching] job=%r words=%s", job["title"], words)
+        _log.info("[matching] found %d candidates semantically; fetching profiles…", len(candidate_ids))
 
+        # 3. Fetch full profiles for the discovered candidates
+        placeholders = ", ".join(["%s"] * len(candidate_ids))
         conn = get_connection()
         cur  = conn.cursor(dictionary=True)
         try:
             cur.execute(
                 f"""
-                SELECT DISTINCT
-                    cp.user_id,
-                    cp.cv_summary,
-                    cp.years_experience,
-                    cp.expected_ctc,
-                    cp.skills
-                FROM candidate_profile cp
-                JOIN candidate_target_roles ctr ON ctr.candidate_id = cp.user_id
-                WHERE cp.is_active = 1
-                  AND ({like_conditions})
-                LIMIT 200
+                SELECT
+                    user_id,
+                    cv_summary,
+                    years_experience,
+                    expected_ctc,
+                    skills
+                FROM candidate_profile
+                WHERE is_active = TRUE
+                  AND user_id IN ({placeholders})
                 """,
-                like_params,
+                candidate_ids,
             )
             candidates = cur.fetchall()
         finally:
@@ -94,35 +99,70 @@ def run_matching(job_id: str) -> None:
         _log.info("[matching] %d candidates for job %s — scoring…", len(candidates), job_id)
 
         # 3. AI score each candidate
-        from backend.config import GROQ_API_KEY
+        from backend.config import GROQ_API_KEY, USER_DATA_DIR
         if not GROQ_API_KEY:
             _bulk_insert(job_id, [(c["user_id"], 50, "AI scoring not configured.") for c in candidates])
             return
 
         from groq import Groq as _Groq
         client  = _Groq(api_key=GROQ_API_KEY)
-        jd_text = f"Job Title: {job['title']}\n\n{(job.get('description') or '')[:2000]}"
+        jd_text = f"JOB TITLE: {job['title']}\n\nDESCRIPTION:\n{(job.get('description') or '')[:2500]}"
         scored: list[tuple[int, int, str]] = []
 
         for cand in candidates:
             try:
-                prompt = f"""{jd_text}
+                # Load full CV data to give AI project context
+                user_id = cand["user_id"]
+                full_cv = {}
+                try:
+                    # Try to find the user's data folder to get projects
+                    conn_tmp = get_connection()
+                    cur_tmp  = conn_tmp.cursor(dictionary=True)
+                    cur_tmp.execute("SELECT data_folder FROM user_credentials WHERE id = %s", (user_id,))
+                    u_row = cur_tmp.fetchone()
+                    cur_tmp.close()
+                    conn_tmp.close()
 
-CANDIDATE SUMMARY: {cand.get('cv_summary') or 'Not available'}
-SKILLS: {cand.get('skills') or '[]'}
-EXPERIENCE: {cand.get('years_experience', 0)} years
+                    if u_row and u_row.get("data_folder"):
+                        cv_path = USER_DATA_DIR / u_row["data_folder"] / "cv_data.json"
+                        if cv_path.exists():
+                            full_cv = json.loads(cv_path.read_text(encoding="utf-8"))
+                except: pass
 
-Score this candidate 0-100 for job fit.
-Return ONLY valid JSON: {{"score": <0-100>, "reason": "<one sentence>"}}"""
+                projects_text = ""
+                for p in full_cv.get("projects", []):
+                    projects_text += f"- {p.get('name')}: {p.get('description')} (Tech: {p.get('tech_stack')})\n"
+
+                prompt = f"""
+ROLE: Senior Technical Recruiter
+TASK: Evaluate the candidate's fit for the following job.
+
+{jd_text}
+
+CANDIDATE DATA:
+- Summary: {cand.get('cv_summary') or 'N/A'}
+- Skills: {cand.get('skills') or '[]'}
+- Experience: {cand.get('years_experience', 0)} years
+- Key Projects:
+{projects_text or "No specific projects listed."}
+
+SCORING CRITERIA:
+1. HOLISTIC MATCH: Do not just count keywords. If a candidate hasn't listed "LangChain" but has built "Agentic AI platforms" or "LLM-based automation," they likely have the equivalent skill.
+2. PROJECT VALUE: High-complexity projects (like building automation platforms, OCR systems, or BI chatbots) should be weighted heavily.
+3. SENIORITY: Consider if the projects demonstrate enough autonomy for an 'Engineer' title, regardless of the 'Intern' label.
+
+Return ONLY valid JSON:
+{{"score": <0-100>, "reason": "<one concise sentence explaining the score focusing on project/skill alignment>"}}
+"""
 
                 resp   = client.chat.completions.create(
                     model="llama-3.1-8b-instant",
                     messages=[
-                        {"role": "system", "content": "You are a recruiter. Return only valid JSON."},
+                        {"role": "system", "content": "You are a highly intuitive technical recruiter who prioritizes project complexity and inferred skills over keyword checklists. Return only valid JSON."},
                         {"role": "user",   "content": prompt},
                     ],
                     temperature=0.1,
-                    max_tokens=100,
+                    max_tokens=150,
                     response_format={"type": "json_object"},
                 )
                 data   = json.loads(resp.choices[0].message.content)
@@ -153,10 +193,10 @@ def _bulk_insert(job_id: str, scored: list[tuple[int, int, str]]) -> None:
                 INSERT INTO candidate_job_matches
                     (job_id, user_id, ai_score, ai_reasoning, shortlist_status, matched_at)
                 VALUES (%s, %s, %s, %s, 'pending', %s)
-                ON DUPLICATE KEY UPDATE
-                    ai_score         = VALUES(ai_score),
-                    ai_reasoning     = VALUES(ai_reasoning),
-                    matched_at       = VALUES(matched_at)
+                ON CONFLICT (job_id, user_id) DO UPDATE SET
+                    ai_score         = EXCLUDED.ai_score,
+                    ai_reasoning     = EXCLUDED.ai_reasoning,
+                    matched_at       = EXCLUDED.matched_at
                 """,
                 (job_id, user_id, score, reason, now),
             )

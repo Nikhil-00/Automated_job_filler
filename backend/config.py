@@ -33,11 +33,10 @@ def _optional(key: str, default: str = "") -> str:
     return os.getenv(key, default)
 
 
-# ── MySQL ─────────────────────────────────────────────────────────────────────
-DB_HOST     = _optional("DB_HOST",     "localhost")
-DB_USER     = _optional("DB_USER",     "root")
-DB_PASSWORD = _require("DB_PASSWORD")
-DB_NAME     = _optional("DB_NAME",     "Auto_login_cv")
+# ── Supabase / PostgreSQL ─────────────────────────────────────────────────────
+SUPABASE_URL             = _require("SUPABASE_URL")
+SUPABASE_DB_URL          = _require("SUPABASE_DB_URL")
+SUPABASE_SERVICE_ROLE_KEY = _optional("SUPABASE_SERVICE_ROLE_KEY")
 
 # ── JWT ───────────────────────────────────────────────────────────────────────
 JWT_SECRET      = _require("JWT_SECRET")
@@ -69,3 +68,8 @@ CORS_ORIGINS = [o.strip() for o in _cors_raw.split(",") if o.strip()]
 # ── Paths ─────────────────────────────────────────────────────────────────────
 USER_DATA_DIR = PROJECT_ROOT / "user_data"
 USER_DATA_DIR.mkdir(exist_ok=True)
+
+VECTOR_DB_DIR = PROJECT_ROOT / "vector_db"
+VECTOR_DB_DIR.mkdir(exist_ok=True)
+
+OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"

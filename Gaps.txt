@@ -1,0 +1,14 @@
+Gap 1: The Candidate’s "Browse Jobs" is still "Dumb"
+The Issue: While recruiters now have "Smart Matching" to find candidates, the candidates themselves are still using a basic Keyword Match (_keyword_match in backend/api/portal.py) when they browse the job board.
+The Risk: A candidate who is a "Machine Learning Engineer" might see a "Data Scientist" job with a low match score (e.g., 40%) just because the words don't match, even though they are perfect for it.
+The Fix: We should use the Vector Store to rank the Job Board for candidates, so they see the most relevant roles at the top of their feed.
+
+
+
+
+Gap 2: "Ghost" Vectors (Data Integrity)
+The Issue: If a user updates their CV or profile details, the Vector in ChromaDB isn't updated unless they manually click "Activate" again.
+The Risk: The matching engine might recommend a candidate based on their old resume because the vector hasn't been refreshed.
+The Fix: We should add a "Hook" so that whenever a user saves their CV or profile, the Vector Store is automatically updated in the background.
+
+

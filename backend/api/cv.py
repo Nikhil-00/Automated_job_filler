@@ -23,6 +23,7 @@ from openai import OpenAI
 from backend.auth.routes import get_current_user
 from backend.auth.service import get_user_by_id, set_user_data_folder
 from backend.config import OPENAI_API_KEY, PROJECT_ROOT, USER_DATA_DIR
+from backend.utils.storage import upload_resume
 
 router    = APIRouter(tags=["cv"])
 _openai   = OpenAI(api_key=OPENAI_API_KEY)
@@ -168,7 +169,13 @@ async def upload_cv(
         (user_dir / "resume_text.txt").write_text(raw_text, encoding="utf-8")
 
         profile            = await asyncio.to_thread(_gpt_parse_resume, raw_text)
-        profile["resume_path"] = str(cv_dest)
+        
+        # ── Cloud Sync ────────────────────────────────────────────────────────
+        cloud_url = await asyncio.to_thread(
+            upload_resume, user_id, f"resume{suffix}", contents
+        )
+        profile["resume_path"] = cloud_url if cloud_url else str(cv_dest)
+        profile["is_cloud_stored"] = bool(cloud_url)
 
         (user_dir / "profile.json").write_text(
             json.dumps(profile, indent=2, ensure_ascii=False)

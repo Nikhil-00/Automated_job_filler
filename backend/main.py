@@ -66,7 +66,7 @@ def startup() -> None:
     try:
         init_db()
     except Exception as e:
-        _log.warning("DB init failed: %s. Check MySQL is running and .env credentials.", e)
+        _log.warning("DB init failed: %s. Check Supabase connection and .env credentials.", e)
 
     _scheduler.add_job(_run_session_cleanup, "interval", hours=1, id="session_cleanup")
     _scheduler.start()

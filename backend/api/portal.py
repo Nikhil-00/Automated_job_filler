@@ -78,8 +78,8 @@ def _keyword_match(job: dict, profile: dict) -> int:
 
 _SORT_MAP = {
     "recent":       "jp.created_at DESC",
-    "salary_high":  "ISNULL(jp.salary_max), jp.salary_max DESC",
-    "salary_low":   "ISNULL(jp.salary_min), jp.salary_min ASC",
+    "salary_high":  "jp.salary_max IS NULL, jp.salary_max DESC",
+    "salary_low":   "jp.salary_min IS NULL, jp.salary_min ASC",
     # "match" is computed in Python after the query — fall back to recent for SQL
 }
 
@@ -107,7 +107,7 @@ def list_jobs(
     user_id = int(user["sub"])
     profile = _load_user_profile(user_id)
 
-    conditions = ["jp.is_active = 1", "jp.experience_min <= %s", "jp.experience_max >= %s"]
+    conditions = ["jp.is_active = TRUE", "jp.experience_min <= %s", "jp.experience_max >= %s"]
     params: list = [exp_max, exp_min]
 
     if search:
@@ -138,7 +138,7 @@ def list_jobs(
         conditions.append("jp.company_name LIKE %s")
         params.append(f"%{company}%")
     if days_ago > 0:
-        conditions.append("jp.created_at >= DATE_SUB(NOW(), INTERVAL %s DAY)")
+        conditions.append("jp.created_at >= NOW() - (%s * INTERVAL '1 day')")
         params.append(days_ago)
     if applied_filter == "applied":
         conditions.append(
@@ -227,7 +227,9 @@ def apply_to_job(job_id: str, user: dict = Depends(get_current_user)):
             )
             conn.commit()
         except Exception as exc:
-            if getattr(exc, "errno", None) == 1062:  # duplicate
+            # psycopg2 / pg error code for unique_violation is 23505
+            pgcode = getattr(exc, "pgcode", None)
+            if pgcode == "23505":
                 raise HTTPException(status_code=409, detail="You have already applied to this job.")
             raise
     finally:

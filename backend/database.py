@@ -1,112 +1,126 @@
 """
 backend/database.py
 ────────────────────
-MySQL helpers with connection pooling.
-Pool is initialised lazily after init_db() creates the database.
+PostgreSQL helpers with connection pooling (for Supabase).
+Includes a wrapper to maintain compatibility with MySQL-style dictionary cursors.
 """
 from __future__ import annotations
 
 import logging
 import threading
+import psycopg2
+from psycopg2 import pool, extras
+from backend.config import SUPABASE_DB_URL
 
 _log = logging.getLogger(__name__)
 
-import mysql.connector
-from mysql.connector import Error
-from mysql.connector.pooling import MySQLConnectionPool
+# ── Connection Wrapper ────────────────────────────────────────────────────────
 
-from backend.config import DB_HOST, DB_NAME, DB_PASSWORD, DB_USER
+class DictConnection:
+    """
+    A wrapper around psycopg2 connection to support .cursor(dictionary=True)
+    syntax used in the original MySQL implementation.
+    """
+    def __init__(self, conn):
+        self._conn = conn
+
+    def cursor(self, *args, **kwargs):
+        # Handle original MySQL dictionary=True parameter
+        if kwargs.pop('dictionary', False):
+            kwargs['cursor_factory'] = extras.RealDictCursor
+        return self._conn.cursor(*args, **kwargs)
+
+    def commit(self): return self._conn.commit()
+    def rollback(self): return self._conn.rollback()
+    def close(self):
+        """Return the connection to the pool instead of closing it."""
+        try:
+            _get_pool().putconn(self._conn)
+        except Exception as e:
+            _log.error("Error returning connection to pool: %s", e)
+    
+    def __enter__(self): return self
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type: self._conn.rollback()
+        else: self._conn.commit()
+        self.close()
 
 # ── Connection pool ───────────────────────────────────────────────────────────
 
-_pool: MySQLConnectionPool | None = None
+_pool: pool.SimpleConnectionPool | None = None
 _pool_lock = threading.Lock()
 
 
-def _get_pool() -> MySQLConnectionPool:
+def _get_pool() -> pool.SimpleConnectionPool:
     global _pool
     if _pool is not None:
         return _pool
     with _pool_lock:
         if _pool is None:
-            _pool = MySQLConnectionPool(
-                pool_name="autoapply",
-                pool_size=10,
-                host=DB_HOST,
-                user=DB_USER,
-                password=DB_PASSWORD,
-                database=DB_NAME,
-                connect_timeout=10,
+            _pool = pool.SimpleConnectionPool(
+                minconn=1,
+                maxconn=20,
+                dsn=SUPABASE_DB_URL
             )
     return _pool
 
 
-def get_connection() -> mysql.connector.MySQLConnection:
-    """Return a pooled connection to the database."""
-    return _get_pool().get_connection()
+def get_connection():
+    """Return a pooled connection wrapped for dictionary support."""
+    conn = _get_pool().getconn()
+    return DictConnection(conn)
 
 
 # ── One-time DB + table init ──────────────────────────────────────────────────
 
 def init_db() -> None:
     """
-    Create the database (if it doesn't exist) and all required tables.
-    Called once at server startup.  Uses a raw connection (not the pool)
-    so it can connect before the target database exists.
+    Create all required tables in PostgreSQL.
+    Called once at server startup.
     """
-    bare = mysql.connector.connect(
-        host=DB_HOST, user=DB_USER, password=DB_PASSWORD
-    )
-    cur = bare.cursor()
-    cur.execute(
-        f"CREATE DATABASE IF NOT EXISTS `{DB_NAME}` "
-        "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
-    )
-    bare.commit()
-    cur.close()
-    bare.close()
-
-    # Now use a direct (non-pooled) connection for DDL so the pool can be
-    # initialised cleanly afterwards.
-    conn = mysql.connector.connect(
-        host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
-    )
+    conn = psycopg2.connect(SUPABASE_DB_URL)
     cur = conn.cursor()
 
+    # Enable pgvector extension
+    cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+
+    # User credentials
     cur.execute("""
         CREATE TABLE IF NOT EXISTS user_credentials (
-            id            INT          AUTO_INCREMENT PRIMARY KEY,
+            id            SERIAL       PRIMARY KEY,
             first_name    VARCHAR(100) NOT NULL,
             last_name     VARCHAR(100) NOT NULL,
             email         VARCHAR(255) UNIQUE NOT NULL,
             phone         VARCHAR(30),
             password_hash VARCHAR(255) NOT NULL,
-            role          ENUM('user','admin','company') DEFAULT 'user',
+            role          VARCHAR(20)  DEFAULT 'user',
             is_verified   BOOLEAN      DEFAULT FALSE,
             data_folder   VARCHAR(600),
             created_at    TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        )
     """)
 
+    # OTP codes
     cur.execute("""
         CREATE TABLE IF NOT EXISTS otp_codes (
-            id         INT         AUTO_INCREMENT PRIMARY KEY,
+            id            SERIAL       PRIMARY KEY,
             email      VARCHAR(255) NOT NULL,
-            otp_code   VARCHAR(10)  NOT NULL,
-            expires_at DATETIME     NOT NULL,
-            used       BOOLEAN      DEFAULT FALSE,
-            attempt_count TINYINT   DEFAULT 0,
-            created_at TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
-            INDEX idx_email_otp (email)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            otp_code      VARCHAR(10)  NOT NULL,
+            expires_at    TIMESTAMP    NOT NULL,
+            used          BOOLEAN      DEFAULT FALSE,
+            attempt_count SMALLINT     DEFAULT 0,
+            created_at    TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
+        )
     """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_email_otp ON otp_codes (email);")
 
+    # Applied jobs
     cur.execute("""
         CREATE TABLE IF NOT EXISTS applied_jobs (
             id               VARCHAR(36)   PRIMARY KEY,
-            user_id          INT           NOT NULL,
+            user_id          INT           NOT NULL REFERENCES user_credentials(id) ON DELETE CASCADE,
             platform         VARCHAR(20)   NOT NULL,
-            applied_at       DATETIME      NOT NULL,
+            applied_at       TIMESTAMP     NOT NULL,
             session_role     VARCHAR(255)  DEFAULT '',
             session_location VARCHAR(255)  DEFAULT '',
             job_index        INT           DEFAULT 0,
@@ -118,55 +132,39 @@ def init_db() -> None:
             description      TEXT,
             url              TEXT,
             match_score      INT           DEFAULT 0,
-            FOREIGN KEY (user_id) REFERENCES user_credentials(id) ON DELETE CASCADE,
-            INDEX idx_user_applied (user_id, applied_at)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            ai_match_score   INT           DEFAULT NULL,
+            ai_score_reason  TEXT          DEFAULT NULL
+        )
     """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_user_applied ON applied_jobs (user_id, applied_at);")
 
+    # Company requests
     cur.execute("""
         CREATE TABLE IF NOT EXISTS company_requests (
-            id                INT           AUTO_INCREMENT PRIMARY KEY,
+            id                SERIAL        PRIMARY KEY,
             company_name      VARCHAR(255)  NOT NULL,
             officer_name      VARCHAR(255)  NOT NULL,
             email             VARCHAR(255)  NOT NULL,
             phone             VARCHAR(30)   NOT NULL,
             otp_code          VARCHAR(10),
-            otp_expires_at    DATETIME,
-            is_otp_verified   TINYINT(1)    DEFAULT 0,
-            status            ENUM('pending','approved','rejected') DEFAULT 'pending',
+            otp_expires_at    TIMESTAMP,
+            is_otp_verified   BOOLEAN       DEFAULT FALSE,
+            status            VARCHAR(20)   DEFAULT 'pending',
             assigned_email    VARCHAR(255)  DEFAULT NULL,
             assigned_password VARCHAR(255)  DEFAULT NULL,
             company_key       VARCHAR(20)   DEFAULT NULL,
-            created_at        TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
-            INDEX idx_email (email)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            company_type      VARCHAR(10)   DEFAULT 'big4',
+            custom_company_name VARCHAR(255) DEFAULT NULL,
+            created_at        TIMESTAMP     DEFAULT CURRENT_TIMESTAMP
+        )
     """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_comp_email ON company_requests (email);")
 
-    # Safe column additions — compatible with MySQL < 8.0.3 which lacks IF NOT EXISTS.
-    # Error 1060 = "Duplicate column name" — already exists, safe to ignore.
-    # Any other error is re-raised so real problems aren't silently swallowed.
-    _migrations = [
-        ("company_requests", "assigned_email",      "VARCHAR(255) DEFAULT NULL"),
-        ("company_requests", "assigned_password",   "VARCHAR(255) DEFAULT NULL"),
-        ("company_requests", "company_key",         "VARCHAR(20)  DEFAULT NULL"),
-        ("company_requests", "company_type",        "VARCHAR(10)  DEFAULT 'big4'"),
-        ("company_requests", "custom_company_name", "VARCHAR(255) DEFAULT NULL"),
-        ("applied_jobs",     "match_score",         "INT          DEFAULT 0"),
-        ("applied_jobs",     "ai_match_score",      "INT          DEFAULT NULL"),
-        ("applied_jobs",     "ai_score_reason",     "TEXT         DEFAULT NULL"),
-        ("otp_codes",        "attempt_count",       "TINYINT      DEFAULT 0"),
-    ]
-    for table, column, definition in _migrations:
-        try:
-            cur.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
-        except Exception as _e:
-            if getattr(_e, "errno", None) != 1060:  # 1060 = duplicate column, already exists
-                raise
-
+    # Job postings
     cur.execute("""
         CREATE TABLE IF NOT EXISTS job_postings (
             id              VARCHAR(36)  PRIMARY KEY,
-            company_id      INT          NOT NULL,
+            company_id      INT          NOT NULL REFERENCES company_requests(id) ON DELETE CASCADE,
             company_name    VARCHAR(255) NOT NULL,
             title           VARCHAR(500) NOT NULL,
             description     TEXT         NOT NULL,
@@ -180,89 +178,82 @@ def init_db() -> None:
             salary_max      BIGINT       DEFAULT NULL,
             salary_currency VARCHAR(10)  DEFAULT 'INR',
             openings        INT          DEFAULT 1,
-            is_active       TINYINT(1)   DEFAULT 1,
-            created_at      DATETIME     NOT NULL,
-            expires_at      DATETIME     DEFAULT NULL,
-            FOREIGN KEY (company_id) REFERENCES company_requests(id) ON DELETE CASCADE,
-            INDEX idx_active_created (is_active, created_at)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            is_active       BOOLEAN      DEFAULT TRUE,
+            created_at      TIMESTAMP    NOT NULL,
+            expires_at      TIMESTAMP    DEFAULT NULL,
+            embedding       VECTOR(1536)
+        )
     """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_active_created ON job_postings (is_active, created_at);")
 
+    # Job applications
     cur.execute("""
         CREATE TABLE IF NOT EXISTS job_applications (
             id              VARCHAR(36) PRIMARY KEY,
-            job_id          VARCHAR(36) NOT NULL,
-            user_id         INT         NOT NULL,
-            applied_at      DATETIME    NOT NULL,
+            job_id          VARCHAR(36) NOT NULL REFERENCES job_postings(id)      ON DELETE CASCADE,
+            user_id         INT         NOT NULL REFERENCES user_credentials(id)  ON DELETE CASCADE,
+            applied_at      TIMESTAMP   NOT NULL,
             status          VARCHAR(20) DEFAULT 'applied',
             ai_match_score  INT         DEFAULT NULL,
             ai_score_reason TEXT        DEFAULT NULL,
-            FOREIGN KEY (job_id)  REFERENCES job_postings(id)      ON DELETE CASCADE,
-            FOREIGN KEY (user_id) REFERENCES user_credentials(id)  ON DELETE CASCADE,
-            UNIQUE KEY uq_job_user (job_id, user_id),
-            INDEX idx_job  (job_id),
-            INDEX idx_user (user_id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            UNIQUE (job_id, user_id)
+        )
     """)
 
+    # Email logs
     cur.execute("""
         CREATE TABLE IF NOT EXISTS email_logs (
-            id           INT          AUTO_INCREMENT PRIMARY KEY,
+            id           SERIAL       PRIMARY KEY,
             candidate_id INT          NOT NULL,
             job_id       VARCHAR(100) NOT NULL,
             email_type   VARCHAR(50)  NOT NULL,
             recruiter_id INT          NOT NULL,
-            sent_at      DATETIME     NOT NULL,
-            UNIQUE KEY uq_send (candidate_id, job_id, email_type),
-            INDEX idx_job_id (job_id),
-            INDEX idx_recruiter (recruiter_id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            sent_at      TIMESTAMP    NOT NULL,
+            UNIQUE (candidate_id, job_id, email_type)
+        )
     """)
 
+    # Candidate profile
     cur.execute("""
         CREATE TABLE IF NOT EXISTS candidate_profile (
-            id                INT          AUTO_INCREMENT PRIMARY KEY,
-            user_id           INT          NOT NULL UNIQUE,
+            id                SERIAL       PRIMARY KEY,
+            user_id           INT          NOT NULL UNIQUE REFERENCES user_credentials(id) ON DELETE CASCADE,
             years_experience  FLOAT        DEFAULT 0,
             expected_ctc      BIGINT       DEFAULT NULL,
             skills            TEXT         DEFAULT NULL,
             cv_summary        TEXT         DEFAULT NULL,
             current_job_title VARCHAR(255) DEFAULT NULL,
-            is_active         TINYINT(1)   DEFAULT 1,
+            is_active         BOOLEAN      DEFAULT TRUE,
             created_at        TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
-            updated_at        TIMESTAMP    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES user_credentials(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            updated_at        TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+            embedding         VECTOR(1536)
+        )
     """)
 
+    # Target roles
     cur.execute("""
         CREATE TABLE IF NOT EXISTS candidate_target_roles (
-            id           INT          AUTO_INCREMENT PRIMARY KEY,
-            candidate_id INT          NOT NULL,
-            job_title    VARCHAR(255) NOT NULL,
-            FOREIGN KEY (candidate_id) REFERENCES user_credentials(id) ON DELETE CASCADE,
-            INDEX idx_candidate (candidate_id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            id           SERIAL       PRIMARY KEY,
+            candidate_id INT          NOT NULL REFERENCES user_credentials(id) ON DELETE CASCADE,
+            job_title    VARCHAR(255) NOT NULL
+        )
     """)
 
+    # Job matches
     cur.execute("""
         CREATE TABLE IF NOT EXISTS candidate_job_matches (
-            id               INT         AUTO_INCREMENT PRIMARY KEY,
-            job_id           VARCHAR(36) NOT NULL,
-            user_id          INT         NOT NULL,
+            id               SERIAL      PRIMARY KEY,
+            job_id           VARCHAR(36) NOT NULL REFERENCES job_postings(id)     ON DELETE CASCADE,
+            user_id          INT         NOT NULL REFERENCES user_credentials(id) ON DELETE CASCADE,
             ai_score         INT         DEFAULT NULL,
             ai_reasoning     TEXT        DEFAULT NULL,
             shortlist_status VARCHAR(20) DEFAULT 'pending',
-            matched_at       DATETIME    NOT NULL,
-            FOREIGN KEY (job_id)  REFERENCES job_postings(id)     ON DELETE CASCADE,
-            FOREIGN KEY (user_id) REFERENCES user_credentials(id) ON DELETE CASCADE,
-            UNIQUE KEY uq_job_user (job_id, user_id),
-            INDEX idx_job  (job_id),
-            INDEX idx_user (user_id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            matched_at       TIMESTAMP   NOT NULL,
+            UNIQUE (job_id, user_id)
+        )
     """)
 
     conn.commit()
     cur.close()
     conn.close()
-    _log.info("[DB] Tables verified / created.")
+    _log.info("[DB] Supabase tables verified / created.")

@@ -20,6 +20,8 @@ from backend.auth.models import (
     SignupRequest,
     UserInfo,
     VerifyOtpRequest,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
 )
 from backend.auth.utils import decode_jwt
 
@@ -106,6 +108,18 @@ def login(req: LoginRequest, request: Request):
 def resend_otp(req: ResendOtpRequest, request: Request):
     _otp_limiter.check(req.email)
     return service.resend_otp(req.email)
+
+
+@router.post("/forgot-password")
+def forgot_password(req: ForgotPasswordRequest, request: Request):
+    _otp_limiter.check(req.email)
+    return service.forgot_password(req.email)
+
+
+@router.post("/reset-password")
+def reset_password(req: ResetPasswordRequest, request: Request):
+    _verify_limiter.check(_client_ip(request))
+    return service.reset_password(req.email, req.otp_code, req.new_password)
 
 
 # ── Protected endpoints ───────────────────────────────────────────────────────
