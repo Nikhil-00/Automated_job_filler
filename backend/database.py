@@ -6,7 +6,10 @@ Pool is initialised lazily after init_db() creates the database.
 """
 from __future__ import annotations
 
+import logging
 import threading
+
+_log = logging.getLogger(__name__)
 
 import mysql.connector
 from mysql.connector import Error
@@ -203,21 +206,63 @@ def init_db() -> None:
     """)
 
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS ey_jobs (
-            job_id      VARCHAR(25)   PRIMARY KEY,
-            title       VARCHAR(500)  NOT NULL,
-            location    VARCHAR(300)  DEFAULT '',
-            url         TEXT          NOT NULL,
-            description TEXT          DEFAULT NULL,
-            first_seen  DATETIME      NOT NULL,
-            last_seen   DATETIME      NOT NULL,
-            is_active   TINYINT(1)    DEFAULT 1,
-            INDEX idx_active (is_active),
-            FULLTEXT idx_ft_title (title)
+        CREATE TABLE IF NOT EXISTS email_logs (
+            id           INT          AUTO_INCREMENT PRIMARY KEY,
+            candidate_id INT          NOT NULL,
+            job_id       VARCHAR(100) NOT NULL,
+            email_type   VARCHAR(50)  NOT NULL,
+            recruiter_id INT          NOT NULL,
+            sent_at      DATETIME     NOT NULL,
+            UNIQUE KEY uq_send (candidate_id, job_id, email_type),
+            INDEX idx_job_id (job_id),
+            INDEX idx_recruiter (recruiter_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS candidate_profile (
+            id                INT          AUTO_INCREMENT PRIMARY KEY,
+            user_id           INT          NOT NULL UNIQUE,
+            years_experience  FLOAT        DEFAULT 0,
+            expected_ctc      BIGINT       DEFAULT NULL,
+            skills            TEXT         DEFAULT NULL,
+            cv_summary        TEXT         DEFAULT NULL,
+            current_job_title VARCHAR(255) DEFAULT NULL,
+            is_active         TINYINT(1)   DEFAULT 1,
+            created_at        TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+            updated_at        TIMESTAMP    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES user_credentials(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS candidate_target_roles (
+            id           INT          AUTO_INCREMENT PRIMARY KEY,
+            candidate_id INT          NOT NULL,
+            job_title    VARCHAR(255) NOT NULL,
+            FOREIGN KEY (candidate_id) REFERENCES user_credentials(id) ON DELETE CASCADE,
+            INDEX idx_candidate (candidate_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS candidate_job_matches (
+            id               INT         AUTO_INCREMENT PRIMARY KEY,
+            job_id           VARCHAR(36) NOT NULL,
+            user_id          INT         NOT NULL,
+            ai_score         INT         DEFAULT NULL,
+            ai_reasoning     TEXT        DEFAULT NULL,
+            shortlist_status VARCHAR(20) DEFAULT 'pending',
+            matched_at       DATETIME    NOT NULL,
+            FOREIGN KEY (job_id)  REFERENCES job_postings(id)     ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES user_credentials(id) ON DELETE CASCADE,
+            UNIQUE KEY uq_job_user (job_id, user_id),
+            INDEX idx_job  (job_id),
+            INDEX idx_user (user_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     """)
 
     conn.commit()
     cur.close()
     conn.close()
-    print("[DB] Tables verified / created.")
+    _log.info("[DB] Tables verified / created.")

@@ -6,6 +6,7 @@ World Wide Jobs — job-seeker facing endpoints.
 GET  /api/portal/jobs                — browse active postings (with filters + match score)
 POST /api/portal/jobs/{job_id}/apply — apply to a posting
 GET  /api/portal/applied             — my applications
+GET  /api/portal/shortlisted         — jobs where candidate has been shortlisted
 """
 from __future__ import annotations
 
@@ -273,4 +274,87 @@ def my_applications(user: dict = Depends(get_current_user)):
         except Exception:
             r["skills"] = []
 
+    return rows
+
+
+@router.get("/shortlisted")
+def my_shortlisted_jobs(user: dict = Depends(get_current_user)):
+    """
+    Return all jobs where the job seeker has been shortlisted.
+    Combines portal applications (job_applications) and automation
+    applications (applied_jobs — linkedin/naukri/big4) in one list.
+    """
+    user_id = int(user["sub"])
+    conn = get_connection()
+    cur  = conn.cursor(dictionary=True)
+    try:
+        # Portal jobs shortlisted by company
+        cur.execute(
+            """
+            SELECT ja.id           AS application_id,
+                   ja.applied_at,
+                   ja.ai_match_score,
+                   jp.id           AS job_id,
+                   jp.title,
+                   jp.company_name AS company,
+                   jp.location,
+                   jp.work_mode,
+                   jp.job_type,
+                   jp.salary_min,
+                   jp.salary_max,
+                   jp.salary_currency,
+                   jp.skills,
+                   'portal'        AS source,
+                   NULL            AS platform,
+                   NULL            AS job_url
+            FROM   job_applications ja
+            JOIN   job_postings     jp ON jp.id = ja.job_id
+            WHERE  ja.user_id = %s AND ja.status = 'shortlisted'
+            ORDER  BY ja.applied_at DESC
+            """,
+            (user_id,),
+        )
+        portal_rows = cur.fetchall()
+
+        # Automation jobs shortlisted by company (linkedin / naukri / big4_*)
+        cur.execute(
+            """
+            SELECT id          AS application_id,
+                   applied_at,
+                   ai_match_score,
+                   NULL        AS job_id,
+                   title,
+                   company,
+                   location,
+                   NULL        AS work_mode,
+                   NULL        AS job_type,
+                   NULL        AS salary_min,
+                   NULL        AS salary_max,
+                   NULL        AS salary_currency,
+                   NULL        AS skills,
+                   'automation' AS source,
+                   platform,
+                   url         AS job_url
+            FROM   applied_jobs
+            WHERE  user_id = %s AND status = 'shortlisted'
+            ORDER  BY applied_at DESC
+            """,
+            (user_id,),
+        )
+        auto_rows = cur.fetchall()
+    finally:
+        cur.close()
+        conn.close()
+
+    rows = portal_rows + auto_rows
+    for r in rows:
+        if isinstance(r.get("applied_at"), datetime):
+            r["applied_at"] = r["applied_at"].isoformat()
+        try:
+            r["skills"] = _json.loads(r["skills"]) if r.get("skills") else []
+        except Exception:
+            r["skills"] = []
+
+    # Sort combined list newest first
+    rows.sort(key=lambda x: x.get("applied_at") or "", reverse=True)
     return rows

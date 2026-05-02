@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Linkedin, Briefcase, Rocket, History, Building2 } from "lucide-react";
+import { Linkedin, Briefcase, Rocket, History, Star } from "lucide-react";
 import PlatformSection from "./PlatformSection";
-import Big4Section from "./Big4Section";
 import AppliedJobs from "@/pages/AppliedJobs";
+import ShortlistedJobs from "@/pages/ShortlistedJobs";
 import { ProfileData } from "@/lib/mockApi";
 
 const platforms = [
@@ -31,19 +31,11 @@ const platforms = [
     gradient: "from-[hsl(220,20%,20%)] to-[hsl(220,20%,30%)]",
     enabled: false,
   },
-  {
-    id: "big4" as const,
-    name: "Big 4",
-    label: "EY · Deloitte · KPMG · PwC",
-    icon: Building2,
-    gradient: "from-yellow-700 to-yellow-500",
-    enabled: true,
-  },
 ];
 
 interface StepPlatformProps { profileData: ProfileData; }
 
-type ActiveView = "linkedin" | "naukri" | "wellfound" | "big4" | "applied_jobs" | null;
+type ActiveView = "linkedin" | "naukri" | "wellfound" | "applied_jobs" | "shortlisted" | null;
 
 const StepPlatform = ({ profileData }: StepPlatformProps) => {
   const [selected, setSelected] = useState<ActiveView>(null);
@@ -61,7 +53,7 @@ const StepPlatform = ({ profileData }: StepPlatformProps) => {
       <h2 className="text-2xl font-bold text-gradient mb-6 text-center">Choose Job Platform</h2>
 
       {/* Platform cards + Applied Jobs button */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-4">
         {platforms.map((p, i) => (
           <motion.div
             key={p.id}
@@ -111,13 +103,31 @@ const StepPlatform = ({ profileData }: StepPlatformProps) => {
           <h3 className="font-semibold text-foreground mb-1">Applied Jobs</h3>
           <p className="text-xs text-muted-foreground">View your history</p>
         </motion.div>
+
+        {/* Shortlisted card */}
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.35 }}
+          whileHover={{ scale: 1.03, y: -4 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={() => toggle("shortlisted")}
+          className={`glass-card p-6 text-center cursor-pointer transition-all duration-300
+            ${selected === "shortlisted" ? "ring-2 ring-violet-500 glow-purple" : ""}
+          `}
+        >
+          <div className="w-14 h-14 rounded-xl mx-auto mb-3 bg-gradient-to-br from-violet-700 to-violet-400 flex items-center justify-center">
+            <Star className="w-7 h-7 text-foreground" />
+          </div>
+          <h3 className="font-semibold text-foreground mb-1">Shortlisted</h3>
+          <p className="text-xs text-muted-foreground">Jobs you're shortlisted for</p>
+        </motion.div>
       </div>
 
       {/* Expanded panel */}
       <AnimatePresence mode="wait">
         {selected === "linkedin" && <PlatformSection key="linkedin" platform="linkedin" profileData={profileData} />}
         {selected === "naukri"   && <PlatformSection key="naukri"   platform="naukri"   profileData={profileData} />}
-        {selected === "big4"     && <Big4Section key="big4" />}
         {selected === "applied_jobs" && (
           <motion.div
             key="applied_jobs"
@@ -128,6 +138,18 @@ const StepPlatform = ({ profileData }: StepPlatformProps) => {
             className="mt-6"
           >
             <AppliedJobs />
+          </motion.div>
+        )}
+        {selected === "shortlisted" && (
+          <motion.div
+            key="shortlisted"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+            className="mt-6"
+          >
+            <ShortlistedJobs />
           </motion.div>
         )}
       </AnimatePresence>

@@ -3,16 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Building2, LogIn, UserPlus, Loader2, CheckCircle, Eye, EyeOff, Mail } from "lucide-react";
 import AnimatedBackground from "@/components/AnimatedBackground";
 import GlowButton from "@/components/GlowButton";
-import CompanyDashboard from "./CompanyDashboard";
 import NonBig4Dashboard from "./NonBig4Dashboard";
-
-const COMPANY_OPTIONS = [
-  { key: "ey",       name: "Ernst & Young (EY)" },
-  { key: "deloitte", name: "Deloitte" },
-  { key: "kpmg",     name: "KPMG" },
-  { key: "pwc",      name: "PricewaterhouseCoopers (PwC)" },
-  { key: "other",    name: "Other (Custom Company)" },
-];
 
 const API = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
@@ -22,11 +13,9 @@ type Step = "form" | "otp" | "done";
 const cls = "w-full px-4 py-2.5 rounded-lg bg-input border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-yellow-500/50 transition text-sm";
 
 interface DashboardState {
-  token:        string;
-  companyName:  string;
-  officerName:  string;
-  companyKey:   string;
-  companyType:  string;
+  token:       string;
+  companyName: string;
+  officerName: string;
 }
 
 export default function CompanyPortal() {
@@ -34,22 +23,11 @@ export default function CompanyPortal() {
   const [dashboard, setDashboard] = useState<DashboardState | null>(null);
 
   if (dashboard) {
-    if (dashboard.companyType === "other") {
-      return (
-        <NonBig4Dashboard
-          token={dashboard.token}
-          companyName={dashboard.companyName}
-          officerName={dashboard.officerName}
-          onLogout={() => setDashboard(null)}
-        />
-      );
-    }
     return (
-      <CompanyDashboard
+      <NonBig4Dashboard
         token={dashboard.token}
         companyName={dashboard.companyName}
         officerName={dashboard.officerName}
-        companyKey={dashboard.companyKey}
         onLogout={() => setDashboard(null)}
       />
     );
@@ -113,39 +91,29 @@ export default function CompanyPortal() {
 // ── Signup flow (form → OTP → done) ──────────────────────────────────────────
 
 function SignupFlow() {
-  const [step,            setStep]            = useState<Step>("form");
-  const [companyKey,      setCompanyKey]      = useState("ey");
-  const [customName,      setCustomName]      = useState("");
-  const [officerName,     setOfficerName]     = useState("");
-  const [email,           setEmail]           = useState("");
-  const [phone,           setPhone]           = useState("");
-  const [otp,             setOtp]             = useState("");
-  const [loading,         setLoading]         = useState(false);
-  const [error,           setError]           = useState("");
-  const [resending,       setResending]       = useState(false);
-  const [autoApproved,    setAutoApproved]    = useState(false);
-
-  const isOther       = companyKey === "other";
-  const effectiveName = isOther
-    ? (customName.trim() || "Your Company")
-    : (COMPANY_OPTIONS.find(c => c.key === companyKey)?.name ?? companyKey);
+  const [step,         setStep]         = useState<Step>("form");
+  const [companyName,  setCompanyName]  = useState("");
+  const [officerName,  setOfficerName]  = useState("");
+  const [email,        setEmail]        = useState("");
+  const [phone,        setPhone]        = useState("");
+  const [otp,          setOtp]          = useState("");
+  const [loading,      setLoading]      = useState(false);
+  const [error,        setError]        = useState("");
+  const [resending,    setResending]    = useState(false);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isOther && !customName.trim()) { setError("Please enter your company name."); return; }
+    if (!companyName.trim()) { setError("Please enter your company name."); return; }
     setError(""); setLoading(true);
     try {
       const res = await fetch(`${API}/api/company/signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          company_name:        effectiveName,
-          officer_name:        officerName,
+          company_name: companyName.trim(),
+          officer_name: officerName,
           email,
           phone,
-          company_key:         companyKey,
-          company_type:        isOther ? "other" : "big4",
-          custom_company_name: isOther ? customName.trim() : "",
         }),
       });
       const data = await res.json();
@@ -169,7 +137,6 @@ function SignupFlow() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail ?? "Verification failed.");
-      setAutoApproved(data.auto_approved === true);
       setStep("done");
     } catch (err: any) {
       setError(err.message);
@@ -207,29 +174,17 @@ function SignupFlow() {
       {step === "form" && (
         <form onSubmit={handleSignup} className="space-y-4">
           <h2 className="text-base font-semibold text-foreground mb-1">Register your company</h2>
+
           <div>
-            <label className="block text-xs text-muted-foreground mb-1">Select Company</label>
-            <select value={companyKey} onChange={e => { setCompanyKey(e.target.value); setCustomName(""); }}
-              className={cls} required>
-              {COMPANY_OPTIONS.map(c => (
-                <option key={c.key} value={c.key}>{c.name}</option>
-              ))}
-            </select>
+            <label className="block text-xs text-muted-foreground mb-1">Company Name</label>
+            <input
+              value={companyName}
+              onChange={e => setCompanyName(e.target.value)}
+              required
+              placeholder="e.g. Acme Corp"
+              className={cls}
+            />
           </div>
-
-          {isOther && (
-            <div>
-              <label className="block text-xs text-muted-foreground mb-1">Company Name</label>
-              <input
-                value={customName}
-                onChange={e => setCustomName(e.target.value)}
-                required={isOther}
-                placeholder="e.g. Acme Corp"
-                className={cls}
-              />
-            </div>
-          )}
-
           <div>
             <label className="block text-xs text-muted-foreground mb-1">Officer Name</label>
             <input value={officerName} onChange={e => setOfficerName(e.target.value)}
@@ -262,9 +217,7 @@ function SignupFlow() {
       {step === "otp" && (
         <form onSubmit={handleVerify} className="space-y-4">
           <div className="text-center mb-2">
-            <p className="text-sm text-muted-foreground">
-              We sent a 6-digit code to
-            </p>
+            <p className="text-sm text-muted-foreground">We sent a 6-digit code to</p>
             <p className="text-sm font-semibold text-foreground">{email}</p>
           </div>
 
@@ -302,31 +255,15 @@ function SignupFlow() {
       {/* ── Step: done ── */}
       {step === "done" && (
         <div className="text-center py-4 space-y-3">
-          <div className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto
-            ${autoApproved
-              ? "bg-blue-500/20 border border-blue-500/40"
-              : "bg-green-500/20 border border-green-500/40"
-            }`}>
-            {autoApproved
-              ? <Mail className="w-7 h-7 text-blue-400" />
-              : <CheckCircle className="w-7 h-7 text-green-400" />
-            }
+          <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto bg-blue-500/20 border border-blue-500/40">
+            <Mail className="w-7 h-7 text-blue-400" />
           </div>
-          <h3 className="text-lg font-bold text-foreground">
-            {autoApproved ? "Portal Ready!" : "Request Submitted!"}
-          </h3>
-          {autoApproved ? (
-            <p className="text-sm text-muted-foreground">
-              Your company portal has been <span className="text-blue-400 font-medium">auto-approved</span>.
-              Check <span className="text-foreground font-medium">{email}</span> for your login credentials.
-              You can log in right away!
-            </p>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              Your company registration has been submitted for review. We'll reach out to{" "}
-              <span className="text-foreground font-medium">{email}</span> shortly with your login credentials.
-            </p>
-          )}
+          <h3 className="text-lg font-bold text-foreground">Portal Ready!</h3>
+          <p className="text-sm text-muted-foreground">
+            Your company portal has been <span className="text-blue-400 font-medium">approved</span>.
+            Check <span className="text-foreground font-medium">{email}</span> for your login credentials.
+            You can log in right away!
+          </p>
         </div>
       )}
     </motion.div>
@@ -358,8 +295,6 @@ function LoginForm({ onDashboard }: { onDashboard: (d: DashboardState) => void }
         token:       data.token,
         companyName: data.company_name,
         officerName: data.officer_name,
-        companyKey:  data.company_key  ?? "ey",
-        companyType: data.company_type ?? "big4",
       });
     } catch (err: any) {
       setError(err.message);

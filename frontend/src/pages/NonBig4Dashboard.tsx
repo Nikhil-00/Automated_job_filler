@@ -4,8 +4,10 @@ import {
   Building2, Users, Briefcase, PlusCircle, Search, Download,
   MapPin, Clock, Loader2, LogOut, Mail, Phone,
   CheckCircle, XCircle, MessageSquare, Send, X, Bot,
-  ToggleLeft, ToggleRight, Trash2, ChevronDown,
+  ToggleLeft, ToggleRight, Trash2, ChevronDown, Sparkles,
+  Upload, Star,
 } from "lucide-react";
+import AgenticChatPanel from "../components/AgenticChatPanel";
 
 const API = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
@@ -44,6 +46,7 @@ interface PortalApplicant {
   email:           string;
   phone:           string;
   has_cv:          boolean;
+  is_match?:       boolean;
 }
 
 interface Props {
@@ -60,7 +63,8 @@ const cls = "w-full px-4 py-2.5 rounded-lg bg-input border border-border text-fo
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function NonBig4Dashboard({ token, companyName, officerName, onLogout }: Props) {
-  const [tab, setTab] = useState<Tab>("candidates");
+  const [tab,          setTab]          = useState<Tab>("candidates");
+  const [agenticOpen,  setAgenticOpen]  = useState(false);
 
   const authH = { Authorization: `Bearer ${token}` };
 
@@ -79,10 +83,18 @@ export default function NonBig4Dashboard({ token, companyName, officerName, onLo
               <p className="text-xs text-muted-foreground">Welcome, {officerName}</p>
             </div>
           </div>
-          <button onClick={onLogout}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition">
-            <LogOut className="w-4 h-4" /> Logout
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setAgenticOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-violet-500/10 border border-violet-500/30 text-violet-400 hover:bg-violet-500/20 transition"
+            >
+              <Sparkles className="w-3.5 h-3.5" /> AI Recruiter
+            </button>
+            <button onClick={onLogout}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition">
+              <LogOut className="w-4 h-4" /> Logout
+            </button>
+          </div>
         </div>
 
         {/* Tab bar */}
@@ -111,6 +123,12 @@ export default function NonBig4Dashboard({ token, companyName, officerName, onLo
         {tab === "post-job"   && <PostJobTab   token={token} authH={authH} onPosted={() => setTab("my-jobs")} />}
         {tab === "my-jobs"    && <MyJobsTab    token={token} authH={authH} />}
       </div>
+
+      <AgenticChatPanel
+        token={token}
+        isOpen={agenticOpen}
+        onClose={() => setAgenticOpen(false)}
+      />
     </div>
   );
 }
@@ -178,7 +196,7 @@ function CandidatesTab({ token, authH }: { token: string; authH: Record<string, 
   // Auto-fire AI scoring for unscored applicants with CVs
   useEffect(() => {
     const unscored = applicants.filter(
-      a => a.has_cv && a.ai_match_score === null && !scoringIds.has(a.application_id)
+      a => a.has_cv && a.ai_match_score === null && !a.is_match && !scoringIds.has(a.application_id)
     );
     if (!unscored.length) return;
 
@@ -307,10 +325,13 @@ function CandidatesTab({ token, authH }: { token: string; authH: Record<string, 
     } finally { setDownloading(null); }
   };
 
-  const handleAction = async (appId: string, action: "shortlist" | "reject") => {
+  const handleAction = async (appId: string, action: "shortlist" | "reject", applicant?: PortalApplicant) => {
     setActioning(appId);
     try {
-      const res = await fetch(`${API}/api/company/portal-applicants/${appId}/status`, {
+      const url = applicant?.is_match
+        ? `${API}/api/company/jobs/${applicant.job_posting_id}/matched-candidates/${applicant.user_id}/status`
+        : `${API}/api/company/portal-applicants/${appId}/status`;
+      const res = await fetch(url, {
         method:  "PATCH",
         headers: { "Content-Type": "application/json", ...authH },
         body:    JSON.stringify({ action }),
@@ -475,6 +496,12 @@ function CandidatesTab({ token, authH }: { token: string; authH: Record<string, 
                           {a.first_name} {a.last_name}
                         </span>
 
+                        {a.is_match && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-violet-500/10 border border-violet-500/30 text-violet-400">
+                            Auto-Match
+                          </span>
+                        )}
+
                         {score !== null ? (
                           <span
                             title={reason || "AI match score"}
@@ -570,7 +597,7 @@ function CandidatesTab({ token, authH }: { token: string; authH: Record<string, 
                       ) : (
                         <>
                           <button
-                            onClick={() => handleAction(a.application_id, "shortlist")}
+                            onClick={() => handleAction(a.application_id, "shortlist", a)}
                             disabled={actioning === a.application_id}
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-500/10 border border-green-500/30 text-green-400 hover:bg-green-500/20 transition disabled:opacity-50"
                           >
@@ -581,7 +608,7 @@ function CandidatesTab({ token, authH }: { token: string; authH: Record<string, 
                             Shortlist
                           </button>
                           <button
-                            onClick={() => handleAction(a.application_id, "reject")}
+                            onClick={() => handleAction(a.application_id, "reject", a)}
                             disabled={actioning === a.application_id}
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition disabled:opacity-50"
                           >
@@ -704,9 +731,17 @@ function CandidatesTab({ token, authH }: { token: string; authH: Record<string, 
 const CURRENCIES = ["INR", "USD", "EUR", "GBP", "AED", "SGD", "CAD", "AUD"];
 
 function PostJobTab({ token, authH, onPosted }: { token: string; authH: Record<string, string>; onPosted: () => void }) {
+  // Step 1 = give us your JD, Step 2 = review + post
+  const [step,        setStep]        = useState<1 | 2>(1);
+  const [jdMode,      setJdMode]      = useState<"upload" | "paste">("upload");
+  const [pasteText,   setPasteText]   = useState("");
+  const [parsing,     setParsing]     = useState(false);
+  const [parseError,  setParseError]  = useState("");
+
+  // Form fields (populated by AI, editable by recruiter)
   const [title,       setTitle]       = useState("");
   const [description, setDescription] = useState("");
-  const [skillsRaw,   setSkillsRaw]   = useState(""); // comma-separated
+  const [skillsRaw,   setSkillsRaw]   = useState("");
   const [location,    setLocation]    = useState("");
   const [workMode,    setWorkMode]    = useState("onsite");
   const [jobType,     setJobType]     = useState("full-time");
@@ -720,6 +755,61 @@ function PostJobTab({ token, authH, onPosted }: { token: string; authH: Record<s
   const [error,       setError]       = useState("");
   const [success,     setSuccess]     = useState("");
 
+  const applyParsed = (data: any) => {
+    if (data.title)                   setTitle(data.title);
+    if (data.description)             setDescription(data.description);
+    if (data.skills?.length)          setSkillsRaw(data.skills.join(", "));
+    if (data.experience_min != null)  setExpMin(data.experience_min);
+    if (data.experience_max != null)  setExpMax(data.experience_max);
+    if (data.salary_min)              setSalMin(String(data.salary_min));
+    if (data.salary_max)              setSalMax(String(data.salary_max));
+    if (data.location)                setLocation(data.location);
+    if (data.work_mode)               setWorkMode(data.work_mode);
+    if (data.job_type)                setJobType(data.job_type);
+  };
+
+  // Upload PDF / TXT
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setParseError(""); setParsing(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res  = await fetch(`${API}/api/company/parse-jd`, { method: "POST", headers: authH, body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? "Parsing failed.");
+      applyParsed(data);
+      setStep(2);
+    } catch (err: any) {
+      setParseError(err.message ?? "Could not parse the file. Please try paste instead.");
+    } finally {
+      setParsing(false);
+      e.target.value = "";
+    }
+  };
+
+  // Paste text → AI parse
+  const handleParseText = async () => {
+    if (!pasteText.trim()) return;
+    setParseError(""); setParsing(true);
+    try {
+      const res  = await fetch(`${API}/api/company/parse-jd-text`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json", ...authH },
+        body:    JSON.stringify({ text: pasteText }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? "Parsing failed.");
+      applyParsed(data);
+      setStep(2);
+    } catch (err: any) {
+      setParseError(err.message ?? "Could not parse. Please check the text and try again.");
+    } finally {
+      setParsing(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(""); setSuccess(""); setLoading(true);
@@ -732,8 +822,8 @@ function PostJobTab({ token, authH, onPosted }: { token: string; authH: Record<s
           title, description, skills, location,
           work_mode: workMode, job_type: jobType,
           experience_min: expMin, experience_max: expMax,
-          salary_min:     salMin  ? parseInt(salMin)  : null,
-          salary_max:     salMax  ? parseInt(salMax)  : null,
+          salary_min:     salMin ? parseInt(salMin) : null,
+          salary_max:     salMax ? parseInt(salMax) : null,
           salary_currency: currency,
           openings,
         }),
@@ -749,9 +839,112 @@ function PostJobTab({ token, authH, onPosted }: { token: string; authH: Record<s
     }
   };
 
+  // ── Step 1: Give us your JD ───────────────────────────────────────────────
+  if (step === 1) {
+    return (
+      <div className="glass-card p-8 max-w-2xl space-y-6">
+        {/* Header */}
+        <div className="text-center space-y-1">
+          <div className="w-12 h-12 rounded-xl bg-violet-500/15 border border-violet-500/30 flex items-center justify-center mx-auto mb-3">
+            <Sparkles className="w-6 h-6 text-violet-400" />
+          </div>
+          <h2 className="text-lg font-bold text-foreground">Post a Job with AI</h2>
+          <p className="text-sm text-muted-foreground">
+            Give us your job description — upload a PDF or paste the text.<br />
+            AI will fill all the fields for you instantly.
+          </p>
+        </div>
+
+        {/* Mode toggle */}
+        <div className="flex rounded-lg border border-border overflow-hidden">
+          {(["upload", "paste"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => { setJdMode(m); setParseError(""); }}
+              className={`flex-1 py-2 text-sm font-medium transition ${
+                jdMode === m
+                  ? "bg-violet-500/20 text-violet-400 border-b-2 border-violet-400"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
+              }`}
+            >
+              {m === "upload" ? "📄 Upload PDF / TXT" : "📋 Paste Text"}
+            </button>
+          ))}
+        </div>
+
+        {/* Upload */}
+        {jdMode === "upload" && (
+          <label className={`flex flex-col items-center justify-center gap-3 p-10 rounded-xl border-2 border-dashed cursor-pointer transition
+            ${parsing ? "border-border opacity-60 pointer-events-none" : "border-violet-500/40 hover:border-violet-500/70 hover:bg-violet-500/5"}`}
+          >
+            {parsing
+              ? <><Loader2 className="w-8 h-8 text-violet-400 animate-spin" /><p className="text-sm text-muted-foreground">Parsing with AI…</p></>
+              : <>
+                  <Upload className="w-8 h-8 text-violet-400 opacity-70" />
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-foreground">Drop your JD here or click to browse</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">PDF, TXT, DOC, DOCX supported</p>
+                  </div>
+                </>
+            }
+            <input type="file" accept=".pdf,.txt,.doc,.docx" className="hidden" onChange={handleFileUpload} disabled={parsing} />
+          </label>
+        )}
+
+        {/* Paste */}
+        {jdMode === "paste" && (
+          <div className="space-y-3">
+            <textarea
+              value={pasteText}
+              onChange={e => setPasteText(e.target.value)}
+              rows={10}
+              placeholder="Paste the full job description here…&#10;&#10;e.g. We are looking for a Senior Software Engineer…"
+              className={`${cls} resize-y`}
+              disabled={parsing}
+            />
+            <button
+              type="button"
+              onClick={handleParseText}
+              disabled={parsing || !pasteText.trim()}
+              className="w-full py-2.5 px-4 rounded-lg bg-gradient-to-r from-violet-600 to-violet-400 text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition flex items-center justify-center gap-2"
+            >
+              {parsing
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Parsing with AI…</>
+                : <><Sparkles className="w-4 h-4" /> Parse & Fill Fields</>
+              }
+            </button>
+          </div>
+        )}
+
+        {parseError && (
+          <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{parseError}</p>
+        )}
+
+        {/* Skip AI */}
+        <p className="text-center text-xs text-muted-foreground">
+          Prefer to fill manually?{" "}
+          <button type="button" onClick={() => setStep(2)} className="text-violet-400 hover:underline">
+            Skip and fill form yourself
+          </button>
+        </p>
+      </div>
+    );
+  }
+
+  // ── Step 2: Review & post ─────────────────────────────────────────────────
   return (
     <form onSubmit={handleSubmit} className="glass-card p-6 space-y-5 max-w-2xl">
-      <h2 className="text-base font-semibold text-foreground">Post a New Job</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-base font-semibold text-foreground">Review & Post Job</h2>
+        <button
+          type="button"
+          onClick={() => setStep(1)}
+          className="text-xs text-violet-400 hover:underline flex items-center gap-1"
+        >
+          <Upload className="w-3 h-3" /> Re-upload JD
+        </button>
+      </div>
 
       <div>
         <label className="block text-xs text-muted-foreground mb-1">Job Title *</label>
@@ -845,12 +1038,93 @@ function PostJobTab({ token, authH, onPosted }: { token: string; authH: Record<s
 
 // ── My Jobs Tab ───────────────────────────────────────────────────────────────
 
+interface MatchedCandidate {
+  match_id:         number;
+  user_id:          number;
+  first_name:       string;
+  last_name:        string;
+  email:            string;
+  phone:            string;
+  ai_score:         number | null;
+  ai_reasoning:     string | null;
+  shortlist_status: string;
+  current_job_title: string | null;
+  years_experience: number | null;
+  expected_ctc:     number | null;
+  has_cv:           boolean;
+}
+
 function MyJobsTab({ token, authH }: { token: string; authH: Record<string, string> }) {
-  const [jobs,      setJobs]      = useState<Job[]>([]);
-  const [loading,   setLoading]   = useState(true);
-  const [toggling,  setToggling]  = useState<string | null>(null);
-  const [deleting,  setDeleting]  = useState<string | null>(null);
-  const [expanded,  setExpanded]  = useState<string | null>(null);
+  const [jobs,             setJobs]             = useState<Job[]>([]);
+  const [loading,          setLoading]          = useState(true);
+  const [toggling,         setToggling]         = useState<string | null>(null);
+  const [deleting,         setDeleting]         = useState<string | null>(null);
+  const [expanded,         setExpanded]         = useState<string | null>(null);
+  const [matchedMap,       setMatchedMap]       = useState<Record<string, MatchedCandidate[]>>({});
+  const [matchLoading,     setMatchLoading]     = useState<string | null>(null);
+  const [matchActioning,   setMatchActioning]   = useState<string | null>(null);
+  const [matchDownloading, setMatchDownloading] = useState<number | null>(null);
+
+  const loadMatched = async (jobId: string, force = false) => {
+    if (!force && matchedMap[jobId] !== undefined) return;
+    setMatchLoading(jobId);
+    try {
+      const res = await fetch(`${API}/api/company/jobs/${jobId}/matched-candidates`, { headers: authH });
+      if (res.ok) {
+        const data = await res.json();
+        setMatchedMap(prev => ({ ...prev, [jobId]: data.candidates ?? [] }));
+      }
+    } catch { /* ignore */ } finally {
+      setMatchLoading(null);
+    }
+  };
+
+  const reRunMatch = async (jobId: string) => {
+    setMatchLoading(jobId);
+    try {
+      await fetch(`${API}/api/company/jobs/${jobId}/re-match`, { method: "POST", headers: authH });
+      // wait ~3s for background thread then reload
+      setTimeout(() => loadMatched(jobId, true), 3000);
+    } catch {
+      setMatchLoading(null);
+    }
+  };
+
+  const handleMatchAction = async (jobId: string, userId: number, action: "shortlist" | "reject") => {
+    const key = `${jobId}_${userId}`;
+    setMatchActioning(key);
+    try {
+      const res = await fetch(`${API}/api/company/jobs/${jobId}/matched-candidates/${userId}/status`, {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json", ...authH },
+        body:    JSON.stringify({ action }),
+      });
+      if (res.ok) {
+        const newStatus = action === "shortlist" ? "shortlisted" : "rejected";
+        setMatchedMap(prev => ({
+          ...prev,
+          [jobId]: (prev[jobId] ?? []).map(c =>
+            c.user_id === userId ? { ...c, shortlist_status: newStatus } : c
+          ),
+        }));
+      }
+    } finally {
+      setMatchActioning(null);
+    }
+  };
+
+  const downloadMatchedCV = async (userId: number, name: string) => {
+    setMatchDownloading(userId);
+    try {
+      const res = await fetch(`${API}/api/company/cv/${userId}`, { headers: authH });
+      if (!res.ok) { alert("CV not available."); return; }
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href = url; a.download = `${name}_CV.pdf`; a.click();
+      URL.revokeObjectURL(url);
+    } finally { setMatchDownloading(null); }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -990,7 +1264,11 @@ function MyJobsTab({ token, authH }: { token: string; authH: Record<string, stri
                   }
                 </button>
                 <button
-                  onClick={() => setExpanded(expanded === job.id ? null : job.id)}
+                  onClick={() => {
+                    const next = expanded === job.id ? null : job.id;
+                    setExpanded(next);
+                    if (next) loadMatched(next);
+                  }}
                   className="p-2 rounded-lg hover:bg-muted transition text-muted-foreground hover:text-foreground"
                   title="Toggle details"
                 >
@@ -1008,12 +1286,110 @@ function MyJobsTab({ token, authH }: { token: string; authH: Record<string, stri
                 exit={{ height: 0, opacity: 0 }}
                 className="overflow-hidden border-t border-border"
               >
-                <div className="p-4 bg-muted/30">
-                  <p className="text-xs text-muted-foreground whitespace-pre-line leading-relaxed">
-                    {/* show first 500 chars of description */}
-                    {/* description is not in list response — show openings info instead */}
+                <div className="p-4 bg-muted/30 space-y-3">
+                  <p className="text-xs text-muted-foreground">
                     <span className="font-medium text-foreground">Openings:</span> {job.openings}
                   </p>
+
+                  {/* Auto-matched candidates */}
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <Star className="w-3.5 h-3.5 text-violet-400" />
+                        <span className="text-xs font-semibold text-foreground">Auto-Matched Candidates</span>
+                      </div>
+                      <button
+                        onClick={() => reRunMatch(job.id)}
+                        disabled={matchLoading === job.id}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-violet-500/10 border border-violet-500/30 text-violet-400 hover:bg-violet-500/20 transition disabled:opacity-50"
+                      >
+                        {matchLoading === job.id
+                          ? <><Loader2 className="w-3 h-3 animate-spin" /> Running…</>
+                          : <><Sparkles className="w-3 h-3" /> Re-run Match</>}
+                      </button>
+                    </div>
+
+                    {matchLoading === job.id ? (
+                      <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Running matching…
+                      </div>
+                    ) : !matchedMap[job.id] || matchedMap[job.id].length === 0 ? (
+                      <p className="text-xs text-muted-foreground py-2">
+                        No auto-matched candidates yet. Click "Re-run Match" to search now.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {matchedMap[job.id].map(c => {
+                          const actionKey = `${job.id}_${c.user_id}`;
+                          return (
+                            <div key={c.user_id} className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-lg bg-background border border-border">
+                              <div className="flex-1 min-w-0 space-y-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-sm font-semibold text-foreground">{c.first_name} {c.last_name}</span>
+                                  {c.ai_score !== null && (
+                                    <span className={`flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full border
+                                      ${c.ai_score >= 70 ? "text-green-400 border-green-500/40 bg-green-500/10"
+                                      : c.ai_score >= 45 ? "text-yellow-400 border-yellow-500/40 bg-yellow-500/10"
+                                      : "text-red-400 border-red-500/40 bg-red-500/10"}`}
+                                      title={c.ai_reasoning ?? ""}
+                                    >
+                                      <Bot className="w-3 h-3" />{c.ai_score}%
+                                    </span>
+                                  )}
+                                  <span className="text-xs px-2 py-0.5 rounded-full bg-violet-500/10 border border-violet-500/30 text-violet-400">
+                                    Auto-Match
+                                  </span>
+                                  {c.shortlist_status === "shortlisted" && (
+                                    <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/30 text-green-400">Shortlisted</span>
+                                  )}
+                                  {c.shortlist_status === "rejected" && (
+                                    <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/10 border border-red-500/30 text-red-400">Rejected</span>
+                                  )}
+                                </div>
+                                <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                                  <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{c.email}</span>
+                                  {c.current_job_title && <span className="flex items-center gap-1"><Briefcase className="w-3 h-3" />{c.current_job_title}</span>}
+                                  {c.years_experience != null && <span>{c.years_experience} yrs exp</span>}
+                                  {c.expected_ctc && <span>CTC: ₹{c.expected_ctc.toLocaleString()}</span>}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                                <button
+                                  onClick={() => downloadMatchedCV(c.user_id, `${c.first_name}_${c.last_name}`)}
+                                  disabled={!c.has_cv || matchDownloading === c.user_id}
+                                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition
+                                    ${c.has_cv ? "bg-primary/20 border border-primary/40 text-primary hover:bg-primary/30" : "bg-muted border border-border text-muted-foreground opacity-40 cursor-not-allowed"}`}
+                                >
+                                  {matchDownloading === c.user_id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+                                  CV
+                                </button>
+                                {c.shortlist_status === "pending" && (
+                                  <>
+                                    <button
+                                      onClick={() => handleMatchAction(job.id, c.user_id, "shortlist")}
+                                      disabled={matchActioning === actionKey}
+                                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-green-500/10 border border-green-500/30 text-green-400 hover:bg-green-500/20 transition disabled:opacity-50"
+                                    >
+                                      {matchActioning === actionKey ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle className="w-3 h-3" />}
+                                      Shortlist
+                                    </button>
+                                    <button
+                                      onClick={() => handleMatchAction(job.id, c.user_id, "reject")}
+                                      disabled={matchActioning === actionKey}
+                                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition disabled:opacity-50"
+                                    >
+                                      {matchActioning === actionKey ? <Loader2 className="w-3 h-3 animate-spin" /> : <XCircle className="w-3 h-3" />}
+                                      Reject
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </motion.div>
             )}

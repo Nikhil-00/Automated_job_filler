@@ -46,7 +46,9 @@
       "WebFetch(domain:www.naukri.com)",
       "Bash(python -c ' *)",
       "WebFetch(domain:www.linkedin.com)",
-      "WebFetch(domain:support.greenhouse.io)"
+      "WebFetch(domain:support.greenhouse.io)",
+      "Bash(npx tsc *)",
+      "Bash(dir *)"
     ]
   }
 }

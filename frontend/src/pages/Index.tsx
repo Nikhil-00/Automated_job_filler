@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { useNavigate }         from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { Loader2 } from "lucide-react";
+import { Briefcase, CheckCircle, Loader2, Plus, Sparkles, ToggleLeft, ToggleRight, X } from "lucide-react";
 
 import Navbar             from "@/components/Navbar";
 import AnimatedBackground from "@/components/AnimatedBackground";
 import ConfirmDialog      from "@/components/ConfirmDialog";
 import StepPlatform       from "@/components/StepPlatform";
 import WorldWideJobs      from "@/components/WorldWideJobs";
+import { getToken }       from "@/lib/auth";
 
 import { getMe, logout }                                   from "@/lib/auth";
 import { ProfileData, deleteProfileData, getProfileData }  from "@/lib/mockApi";
@@ -157,10 +158,220 @@ const Dashboard = () => {
 
       <main className="pt-20 pb-12 px-4 sm:px-6">
         {profileData && <StepPlatform profileData={profileData} />}
+        <YourJobOnUs expectedCtc={profileData?.expectedCtc ?? ""} />
         <WorldWideJobs />
       </main>
     </div>
   );
 };
+
+// ── Your Job on Us ────────────────────────────────────────────────────────────
+
+const API = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
+
+function YourJobOnUs({ expectedCtc }: { expectedCtc: string }) {
+  const [expanded,    setExpanded]    = useState(false);
+  const [isActive,    setIsActive]    = useState(false);
+  const [roles,       setRoles]       = useState<string[]>(["", "", ""]);
+  const [ctcMax,      setCtcMax]      = useState(expectedCtc);
+  const [loading,     setLoading]     = useState(true);
+  const [saving,      setSaving]      = useState(false);
+  const [message,     setMessage]     = useState("");
+
+  const authH = { Authorization: `Bearer ${getToken() ?? ""}` };
+
+  useEffect(() => {
+    fetch(`${API}/api/jobseeker/activate`, { headers: authH })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return;
+        setIsActive(data.is_active);
+        if (data.target_roles?.length) {
+          const filled = [...data.target_roles, "", "", ""].slice(0, 3);
+          setRoles(filled);
+        }
+        if (data.expected_ctc) setCtcMax(String(data.expected_ctc));
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSave = async () => {
+    const trimmed = roles.filter(r => r.trim());
+    if (!trimmed.length) return;
+    setSaving(true);
+    setMessage("");
+    try {
+      const res = await fetch(`${API}/api/jobseeker/activate`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json", ...authH },
+        body:    JSON.stringify({
+          target_roles:     trimmed,
+          expected_ctc_max: ctcMax ? parseInt(ctcMax) : null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setMessage(data.detail ?? "Failed."); return; }
+      setIsActive(true);
+      setMessage("Activated! You'll be matched to relevant jobs automatically.");
+    } catch {
+      setMessage("Something went wrong. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeactivate = async () => {
+    setSaving(true);
+    try {
+      await fetch(`${API}/api/jobseeker/activate`, { method: "DELETE", headers: authH });
+      setIsActive(false);
+      setMessage("Deactivated.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const setRole = (i: number, v: string) =>
+    setRoles(prev => prev.map((r, idx) => idx === i ? v : r));
+
+  if (loading) return null;
+
+  return (
+    <div className="max-w-3xl mx-auto mt-6 mb-2">
+      <div
+        className={`glass-card overflow-hidden border transition-colors ${
+          isActive ? "border-violet-500/40" : "border-border"
+        }`}
+      >
+        {/* Header row */}
+        <button
+          onClick={() => setExpanded(e => !e)}
+          className="w-full flex items-center justify-between p-4 hover:bg-muted/20 transition"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-violet-500/15 border border-violet-500/30 flex items-center justify-center shrink-0">
+              <Sparkles className="w-4 h-4 text-violet-400" />
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-semibold text-foreground leading-none">Your Job on Us</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {isActive
+                  ? `Active — matched to: ${roles.filter(Boolean).join(", ")}`
+                  : "Let us find and match you to jobs automatically"}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {isActive && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-violet-500/15 border border-violet-500/30 text-violet-400 font-medium">
+                Active
+              </span>
+            )}
+            {expanded
+              ? <X className="w-4 h-4 text-muted-foreground" />
+              : <Plus className="w-4 h-4 text-muted-foreground" />
+            }
+          </div>
+        </button>
+
+        {/* Expanded form */}
+        <AnimatePresence>
+          {expanded && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden border-t border-border"
+            >
+              <div className="p-5 space-y-4">
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Tell us up to 3 roles you're targeting. We'll use your CV and profile to automatically
+                  match you with relevant job postings — no application needed.
+                </p>
+
+                {/* Target roles */}
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground font-medium">Target Job Titles (up to 3)</label>
+                  {roles.map((r, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <div className="w-5 h-5 rounded-full bg-violet-500/15 border border-violet-500/30 flex items-center justify-center shrink-0">
+                        <span className="text-xs text-violet-400 font-bold">{i + 1}</span>
+                      </div>
+                      <input
+                        value={r}
+                        onChange={e => setRole(i, e.target.value)}
+                        placeholder={["e.g. Data Scientist", "e.g. ML Engineer", "e.g. AI Engineer"][i]}
+                        className="flex-1 px-3 py-2 rounded-lg bg-input border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                {/* Expected CTC */}
+                <div>
+                  <label className="text-xs text-muted-foreground font-medium block mb-1">
+                    Expected CTC Max (₹ / year) — optional
+                  </label>
+                  <input
+                    type="number"
+                    value={ctcMax}
+                    onChange={e => setCtcMax(e.target.value)}
+                    placeholder="e.g. 1500000"
+                    className="w-full px-3 py-2 rounded-lg bg-input border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Pre-filled from your profile. Only used to filter out jobs outside your range.</p>
+                </div>
+
+                {message && (
+                  <p className={`text-xs px-3 py-2 rounded-lg border ${
+                    message.includes("Activated") || message.includes("matched")
+                      ? "text-green-400 bg-green-500/10 border-green-500/20"
+                      : message.includes("Deactivated")
+                      ? "text-muted-foreground bg-muted border-border"
+                      : "text-red-400 bg-red-500/10 border-red-500/20"
+                  }`}>{message}</p>
+                )}
+
+                <div className="flex items-center gap-3 pt-1">
+                  {isActive ? (
+                    <>
+                      <button
+                        onClick={handleSave}
+                        disabled={saving}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-violet-500/20 border border-violet-500/40 text-violet-400 text-sm font-semibold hover:bg-violet-500/30 transition disabled:opacity-50"
+                      >
+                        {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                        Update Roles
+                      </button>
+                      <button
+                        onClick={handleDeactivate}
+                        disabled={saving}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-muted border border-border text-muted-foreground text-sm hover:text-foreground transition disabled:opacity-50"
+                      >
+                        <ToggleLeft className="w-3.5 h-3.5" /> Deactivate
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={handleSave}
+                      disabled={saving || !roles.some(r => r.trim())}
+                      className="flex items-center gap-1.5 px-5 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-violet-400 text-white text-sm font-semibold hover:opacity-90 transition disabled:opacity-50"
+                    >
+                      {saving
+                        ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Activating…</>
+                        : <><ToggleRight className="w-3.5 h-3.5" /> Activate</>
+                      }
+                    </button>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}
 
 export default Dashboard;

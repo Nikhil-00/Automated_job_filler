@@ -238,6 +238,33 @@ export const deleteAppliedJob = async (id: string): Promise<void> => {
   if (!res.ok) throw new Error("Failed to delete job entry.");
 };
 
+// ─── Shortlisted Jobs ─────────────────────────────────────────────────────────
+
+export interface ShortlistedJob {
+  application_id: string;
+  applied_at:     string;
+  ai_match_score: number | null;
+  job_id:         string | null;
+  title:          string;
+  company:        string;
+  location:       string;
+  work_mode:      string | null;
+  job_type:       string | null;
+  salary_min:     number | null;
+  salary_max:     number | null;
+  salary_currency: string | null;
+  skills:         string[];
+  source:         "portal" | "automation";
+  platform:       string | null;   // linkedin | naukri | big4_ey | etc. (automation only)
+  job_url:        string | null;   // original job URL (automation only)
+}
+
+export const getShortlistedJobs = async (): Promise<ShortlistedJob[]> => {
+  const res = await fetch(`${API}/api/portal/shortlisted`, { headers: _authHeader() });
+  if (!res.ok) throw new Error("Failed to load shortlisted jobs.");
+  return res.json();
+};
+
 export const updateProfileData = async (fields: Record<string, unknown>): Promise<void> => {
   const res = await fetch(`${API}/api/cv/profile`, {
     method:  "PATCH",

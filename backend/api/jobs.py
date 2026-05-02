@@ -8,6 +8,7 @@ DELETE /api/jobs/applied/{id}   — delete a single entry by UUID
 """
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
 
@@ -16,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from backend.auth.routes import get_current_user
 from backend.database import get_connection
 
+_log = logging.getLogger(__name__)
 router = APIRouter(tags=["jobs"])
 
 
@@ -59,7 +61,7 @@ def append_job_entry(user_id: int, entry: dict) -> None:
         cur.close()
         conn.close()
     except Exception as exc:
-        print(f"[jobs] Failed to save job entry: {exc}")
+        _log.warning("[jobs] Failed to save job entry: %s", exc)
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
