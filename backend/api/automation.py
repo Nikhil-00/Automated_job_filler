@@ -23,7 +23,8 @@ from pydantic import BaseModel
 
 from backend.auth.routes import get_current_user
 from backend.auth.service import get_user_by_id
-from backend.config import PROJECT_ROOT, USER_DATA_DIR
+from backend.auth.service import get_user_by_id
+from backend.config import PROJECT_ROOT, USER_DATA_DIR, BROWSER_HEADLESS
 from backend.shared_state import _sessions, _sessions_lock
 from backend.tools.session_logger import SessionLogger
 
@@ -388,7 +389,7 @@ def _verify_linkedin_credentials(email: str, password: str) -> dict:
         with sync_playwright() as p:
             # Non-headless: user can see and interact with any security check
             browser = p.chromium.launch(
-                headless=False,
+                headless=BROWSER_HEADLESS,
                 args=[
                     "--no-sandbox",
                     "--disable-blink-features=AutomationControlled",
@@ -476,7 +477,7 @@ def _verify_naukri_credentials(email: str, password: str) -> dict:
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(
-                headless=False,
+                headless=BROWSER_HEADLESS,
                 args=[
                     "--no-sandbox",
                     "--disable-blink-features=AutomationControlled",

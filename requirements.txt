@@ -18,10 +18,14 @@ groq
 # ATS PDF generation
 reportlab
 
-# Auth
-mysql-connector-python
+# Auth & Database
+psycopg2-binary
+supabase
 bcrypt
 PyJWT
+
+# Validation
+pydantic
 
 # Job listings
 beautifulsoup4

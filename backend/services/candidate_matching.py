@@ -20,6 +20,9 @@ _TITLE_STOPWORDS = {
     "and", "the", "of", "for", "with", "at", "in", "a", "an",
 }
 
+# Minimum AI score to consider a candidate a "match" for the role
+MIN_MATCH_SCORE = 35
+
 
 def _title_words(title: str) -> list[str]:
     words = re.findall(r"[a-zA-Z]+", title.lower())
@@ -187,7 +190,11 @@ def _bulk_insert(job_id: str, scored: list[tuple[int, int, str]]) -> None:
     conn = get_connection()
     cur  = conn.cursor()
     try:
-        for user_id, score, reason in scored:
+        # 1. Filter out candidates below the threshold
+        valid_scored = [(uid, s, r) for uid, s, r in scored if s >= MIN_MATCH_SCORE]
+        
+        # 2. Upsert valid matches
+        for user_id, score, reason in valid_scored:
             cur.execute(
                 """
                 INSERT INTO candidate_job_matches
@@ -200,6 +207,21 @@ def _bulk_insert(job_id: str, scored: list[tuple[int, int, str]]) -> None:
                 """,
                 (job_id, user_id, score, reason, now),
             )
+            
+        # 3. Cleanup: If any previously matched candidates now fall below threshold (due to re-matching), remove them
+        all_candidate_ids = [uid for uid, s, r in scored]
+        if all_candidate_ids:
+            placeholders = ", ".join(["%s"] * len(all_candidate_ids))
+            cur.execute(
+                f"""
+                DELETE FROM candidate_job_matches 
+                WHERE job_id = %s 
+                  AND user_id IN ({placeholders})
+                  AND ai_score < %s
+                """,
+                [job_id] + all_candidate_ids + [MIN_MATCH_SCORE]
+            )
+            
         conn.commit()
     finally:
         cur.close()

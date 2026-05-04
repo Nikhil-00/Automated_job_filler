@@ -1116,7 +1116,7 @@ Return JSON with exactly these keys:
                 {"role": "user",   "content": prompt},
             ],
             temperature=0.1,
-            max_tokens=800,
+            max_tokens=4096,
             response_format={"type": "json_object"},
         )
         result = _json.loads(resp.choices[0].message.content)
@@ -1194,7 +1194,7 @@ Return JSON with exactly these keys:
                 {"role": "user",   "content": prompt},
             ],
             temperature=0.1,
-            max_tokens=800,
+            max_tokens=4096,
             response_format={"type": "json_object"},
         )
         result = _json.loads(resp.choices[0].message.content)

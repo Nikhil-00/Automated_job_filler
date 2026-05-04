@@ -73,3 +73,6 @@ VECTOR_DB_DIR = PROJECT_ROOT / "vector_db"
 VECTOR_DB_DIR.mkdir(exist_ok=True)
 
 OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
+
+# ── Browser ───────────────────────────────────────────────────────────────────
+BROWSER_HEADLESS = _optional("BROWSER_HEADLESS", "true").lower() == "true"

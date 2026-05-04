@@ -1,0 +1,12 @@
+**/node_modules
+**/__pycache__
+**/*.pyc
+**/.env*
+**/.git
+**/.gitignore
+**/bun.lock
+**/bun.lockb
+**/package-lock.json
+user_data/
+vector_db/
+linkedin_browser_profile/

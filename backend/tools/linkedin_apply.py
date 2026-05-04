@@ -7310,9 +7310,10 @@ def run_automation(
         _profile_dir = os.path.join(SCRIPT_DIR, f"linkedin_browser_profile_{_email_slug}")
         os.makedirs(_profile_dir, exist_ok=True)
 
+        from backend.config import BROWSER_HEADLESS
         context = p.chromium.launch_persistent_context(
             _profile_dir,
-            headless=True,
+            headless=BROWSER_HEADLESS,
             args=[
                 "--no-sandbox",
                 "--disable-blink-features=AutomationControlled",

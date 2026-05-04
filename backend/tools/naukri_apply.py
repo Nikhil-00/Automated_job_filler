@@ -1726,9 +1726,10 @@ def run_automation(
         profile_dir  = os.path.join(SCRIPT_DIR, f"naukri_browser_profile_{email_slug}")
         os.makedirs(profile_dir, exist_ok=True)
 
+        from backend.config import BROWSER_HEADLESS
         context = p.chromium.launch_persistent_context(
             profile_dir,
-            headless=False,
+            headless=BROWSER_HEADLESS,
             args=[
                 "--no-sandbox",
                 "--disable-blink-features=AutomationControlled",
