@@ -71,33 +71,56 @@ def send_email_robust(to_email: str, subject: str, html: str) -> None:
 
     def _get_server():
         import socket
+        import logging
+        log = logging.getLogger(__name__)
+        
+        log.info(f"Connecting to SMTP {SMTP_HOST}:{SMTP_PORT} (SSL: {SMTP_PORT == 465})")
+        
         try:
+            if SMTP_PORT == 465:
+                return smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15)
             return smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15)
         except OSError as e:
+            log.warning(f"Initial connection failed: {e}")
             if e.errno == 101:
+                log.info("Network is unreachable. Attempting IPv4-only connection...")
                 try:
                     addr = socket.getaddrinfo(SMTP_HOST, SMTP_PORT, socket.AF_INET, socket.SOCK_STREAM)[0][4]
-                    srv = smtplib.SMTP(timeout=15)
+                    log.info(f"Resolved {SMTP_HOST} to {addr[0]}. Connecting...")
+                    if SMTP_PORT == 465:
+                        srv = smtplib.SMTP_SSL(timeout=15)
+                    else:
+                        srv = smtplib.SMTP(timeout=15)
                     srv.connect(addr[0], addr[1])
+                    srv.host = SMTP_HOST # Ensure hostname for cert check
                     return srv
-                except Exception:
-                    pass
+                except Exception as ex:
+                    log.error(f"IPv4 fallback failed: {ex}")
+            
             if SMTP_PORT != 465:
+                log.info("Falling back to Port 465 (SMTP_SSL)...")
                 try:
                     return smtplib.SMTP_SSL(SMTP_HOST, 465, timeout=15)
-                except Exception:
-                    pass
+                except Exception as ex:
+                    log.error(f"Fallback to 465 failed: {ex}")
             raise e
 
     try:
         server = _get_server()
+        import logging
+        log = logging.getLogger(__name__)
+        log.info(f"Connection established via {server.__class__.__name__}")
+        
         with server:
             if not isinstance(server, smtplib.SMTP_SSL):
                 server.ehlo()
                 server.starttls()
                 server.ehlo()
+            
             server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
             server.send_message(msg)
+            log.info("Email sent successfully.")
+
     except Exception as e:
         import logging
         logging.getLogger(__name__).error(f"All SMTP connection attempts failed to {to_email}: {e}")
