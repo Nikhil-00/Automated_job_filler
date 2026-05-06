@@ -61,13 +61,51 @@ def decode_jwt(token: str) -> dict:
 
 # ── Email ─────────────────────────────────────────────────────────────────────
 
-def send_otp_email(to_email: str, name: str, otp: str) -> None:
-    """Send a styled HTML OTP email via Gmail SMTP."""
-    msg            = MIMEMultipart("alternative")
+def send_email_robust(to_email: str, subject: str, html: str) -> None:
+    """Send an email using a robust multi-attempt connection strategy."""
+    msg = MIMEMultipart("alternative")
     msg["From"]    = EMAIL_ADDRESS
     msg["To"]      = to_email
-    msg["Subject"] = "Your AutoApply AI Verification Code"
+    msg["Subject"] = subject
+    msg.attach(MIMEText(html, "html"))
 
+    def _get_server():
+        import socket
+        try:
+            return smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15)
+        except OSError as e:
+            if e.errno == 101:
+                try:
+                    addr = socket.getaddrinfo(SMTP_HOST, SMTP_PORT, socket.AF_INET, socket.SOCK_STREAM)[0][4]
+                    srv = smtplib.SMTP(timeout=15)
+                    srv.connect(addr[0], addr[1])
+                    return srv
+                except Exception:
+                    pass
+            if SMTP_PORT != 465:
+                try:
+                    return smtplib.SMTP_SSL(SMTP_HOST, 465, timeout=15)
+                except Exception:
+                    pass
+            raise e
+
+    try:
+        server = _get_server()
+        with server:
+            if not isinstance(server, smtplib.SMTP_SSL):
+                server.ehlo()
+                server.starttls()
+                server.ehlo()
+            server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+            server.send_message(msg)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"All SMTP connection attempts failed to {to_email}: {e}")
+        raise e
+
+
+def send_otp_email(to_email: str, name: str, otp: str) -> None:
+    """Send a styled HTML OTP email via Gmail SMTP."""
     html = f"""
 <!DOCTYPE html>
 <html>
@@ -113,16 +151,4 @@ def send_otp_email(to_email: str, name: str, otp: str) -> None:
 </body>
 </html>
 """
-    msg.attach(MIMEText(html, "html"))
-
-    try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as server:
-            server.ehlo()
-            server.starttls()
-            server.ehlo()  # Re-identify after TLS
-            server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
-            server.send_message(msg)
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).error(f"Failed to send OTP email: {e}")
-        raise e
+    send_email_robust(to_email, "Your AutoApply AI Verification Code", html)

@@ -142,22 +142,10 @@ def _generate_otp() -> str:
     return str(secrets.randbelow(900000) + 100000)
 
 
+from backend.auth.utils import send_email_robust
+
 def _send_email(to: str, subject: str, html: str) -> None:
-    msg = MIMEMultipart("alternative")
-    msg["From"]    = EMAIL_ADDRESS
-    msg["To"]      = to
-    msg["Subject"] = subject
-    msg.attach(MIMEText(html, "html"))
-    try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as s:
-            s.ehlo()
-            s.starttls()
-            s.ehlo()
-            s.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
-            s.send_message(msg)
-    except Exception as e:
-        _log.error(f"SMTP failed to {to}: {e}")
-        raise e
+    send_email_robust(to, subject, html)
 
 
 def _otp_email_html(officer_name: str, company_name: str, otp: str) -> str:
