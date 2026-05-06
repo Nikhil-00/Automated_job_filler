@@ -7,7 +7,7 @@ import GlowButton from "@/components/GlowButton";
 import { login, setToken } from "@/lib/auth";
 import { getCVBuilder }  from "@/lib/cvBuilderApi";
 
-const API = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
+const API = (import.meta.env.VITE_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
 const Login = () => {
   const navigate = useNavigate();

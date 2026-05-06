@@ -410,7 +410,7 @@ const CVBuilder = () => {
     setDeleting(true);
     setDeleteErr("");
     try {
-      const API = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
+      const API = (import.meta.env.VITE_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
       const res  = await fetch(`${API}/api/auth/account`, {
         method:  "DELETE",
         headers: getAuthHeaders(),

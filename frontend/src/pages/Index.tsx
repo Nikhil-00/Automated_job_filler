@@ -167,7 +167,7 @@ const Dashboard = () => {
 
 // ── Your Job on Us ────────────────────────────────────────────────────────────
 
-const API = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
+const API = (import.meta.env.VITE_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
 function YourJobOnUs({ expectedCtc }: { expectedCtc: string }) {
   const [expanded,    setExpanded]    = useState(false);

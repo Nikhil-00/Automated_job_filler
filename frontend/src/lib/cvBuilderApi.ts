@@ -6,7 +6,7 @@
 
 import { getToken } from "./auth";
 
-const API = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
+const API = (import.meta.env.VITE_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

@@ -1,11 +1,11 @@
 /**
  * api.ts  (was mockApi.ts)
  * ──────────────────────────────────────────────────────────────────────────
- * Real API client.  All calls go to the FastAPI backend at VITE_API_BASE_URL.
+ * Real API client.  All calls go to the FastAPI backend at VITE_API_URL.
  * WebSocket streams live automation logs over VITE_WS_URL.
  */
 
-const API  = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
+const API  = (import.meta.env.VITE_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
 const WS   = (import.meta.env.VITE_WS_URL       ?? "ws://localhost:8000"  ).replace(/\/$/, "");
 
 // ─── Types ────────────────────────────────────────────────────────────────────
