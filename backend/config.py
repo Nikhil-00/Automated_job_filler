@@ -45,8 +45,8 @@ JWT_ALGORITHM   = "HS256"
 JWT_EXPIRE_DAYS = 7
 
 # ── SMTP (Gmail) ──────────────────────────────────────────────────────────────
-SMTP_HOST      = "smtp.gmail.com"
-SMTP_PORT      = 587
+SMTP_HOST      = _optional("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT      = int(_optional("SMTP_PORT", "587"))
 EMAIL_ADDRESS  = _optional("EMAIL_ADDRESS", "auto.cv.filling@gmail.com")
 EMAIL_PASSWORD = _require("EMAIL_PASSWORD")
 

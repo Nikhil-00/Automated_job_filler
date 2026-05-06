@@ -124,11 +124,16 @@ def _send_email(to: str, subject: str, html: str) -> None:
     msg["To"]      = to
     msg["Subject"] = subject
     msg.attach(MIMEText(html, "html"))
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as s:
-        s.ehlo()
-        s.starttls()
-        s.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
-        s.send_message(msg)
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as s:
+            s.ehlo()
+            s.starttls()
+            s.ehlo()
+            s.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+            s.send_message(msg)
+    except Exception as e:
+        logger.error(f"SMTP failed to {to}: {e}")
+        raise e
 
 
 def _send_email_background(to: str, subject: str, html: str) -> None:

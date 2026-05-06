@@ -36,7 +36,13 @@ def _send_fresh_otp(cursor, conn, email: str, first_name: str) -> None:
         (email, otp, expires.strftime("%Y-%m-%d %H:%M:%S")),
     )
     conn.commit()
-    send_otp_email(email, first_name, otp)
+    try:
+        send_otp_email(email, first_name, otp)
+    except Exception as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Failed to send verification email: {str(e)}. Please check your SMTP settings."
+        )
 
 
 # ── Auth operations ───────────────────────────────────────────────────────────
