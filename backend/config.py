@@ -44,11 +44,9 @@ ADMIN_PASSWORD  = _require("ADMIN_PASSWORD")
 JWT_ALGORITHM   = "HS256"
 JWT_EXPIRE_DAYS = 7
 
-# ── SMTP (Gmail) ──────────────────────────────────────────────────────────────
-SMTP_HOST      = _optional("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT      = int(_optional("SMTP_PORT", "465"))
-EMAIL_ADDRESS  = _optional("EMAIL_ADDRESS", "auto.cv.filling@gmail.com")
-EMAIL_PASSWORD = _require("EMAIL_PASSWORD")
+# ── Email (Resend) ────────────────────────────────────────────────────────────
+RESEND_API_KEY = _require("RESEND_API_KEY")
+EMAIL_FROM     = _optional("EMAIL_FROM", "AutoApply AI <onboarding@resend.dev>")
 
 # ── OpenAI (fallback for CV parsing) ──────────────────────────────────────────
 OPENAI_API_KEY = _require("OPENAI_API_KEY")

@@ -31,3 +31,4 @@ pydantic
 beautifulsoup4
 requests
 apscheduler
+resend

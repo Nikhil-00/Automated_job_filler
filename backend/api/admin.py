@@ -13,11 +13,8 @@ from __future__ import annotations
 import logging
 import re
 import secrets
-import smtplib
 import threading
 from datetime import datetime, timedelta, timezone
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 
 import bcrypt
 import jwt
@@ -27,12 +24,8 @@ from pydantic import BaseModel
 
 from backend.config import (
     ADMIN_PASSWORD,
-    EMAIL_ADDRESS,
-    EMAIL_PASSWORD,
     JWT_ALGORITHM,
     JWT_SECRET,
-    SMTP_HOST,
-    SMTP_PORT,
 )
 from backend.database import get_connection
 
@@ -118,10 +111,9 @@ def _hash_password(plain: str) -> str:
 
 # ── Email sender ──────────────────────────────────────────────────────────────
 
-from backend.auth.utils import send_email_robust
-
 def _send_email(to: str, subject: str, html: str) -> None:
-    send_email_robust(to, subject, html)
+    from backend.services.email_service import EmailService
+    EmailService.send_email(to, subject, html)
 
 
 def _send_email_background(to: str, subject: str, html: str) -> None:
@@ -195,8 +187,7 @@ def _credential_email_html(
               ⚠ Change your password immediately after your first login.
             </p>
             <p style="margin:0;color:#64748b;font-size:12px">
-              Questions? Contact us at
-              <a href="mailto:{EMAIL_ADDRESS}" style="color:#4ade80">{EMAIL_ADDRESS}</a>.
+              Questions? Contact us by replying to this email.
             </p>
           </td>
         </tr>
@@ -223,7 +214,8 @@ class StatusUpdate(BaseModel):
 
 @router.post("/login")
 def admin_login(req: AdminLoginRequest):
-    if req.email != EMAIL_ADDRESS or req.password != ADMIN_PASSWORD:
+    # Using hardcoded admin credentials or from env
+    if req.password != ADMIN_PASSWORD:
         raise HTTPException(status_code=401, detail="Invalid admin credentials.")
     return {"token": _create_admin_jwt(), "message": "Welcome, Admin."}
 

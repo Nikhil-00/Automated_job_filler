@@ -16,11 +16,8 @@ import json as _json
 import logging
 import re
 import secrets
-import smtplib
 import threading
 from datetime import datetime, timedelta, timezone
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 
 import io
 import uuid
@@ -51,12 +48,8 @@ _PROHIBITED_RE = re.compile(
 
 from backend.config import (
     ADMIN_PASSWORD,
-    EMAIL_ADDRESS,
-    EMAIL_PASSWORD,
     JWT_ALGORITHM,
     JWT_SECRET,
-    SMTP_HOST,
-    SMTP_PORT,
     USER_DATA_DIR,
 )
 from backend.database import get_connection
@@ -142,10 +135,9 @@ def _generate_otp() -> str:
     return str(secrets.randbelow(900000) + 100000)
 
 
-from backend.auth.utils import send_email_robust
-
 def _send_email(to: str, subject: str, html: str) -> None:
-    send_email_robust(to, subject, html)
+    from backend.services.email_service import EmailService
+    EmailService.send_email(to, subject, html)
 
 
 def _otp_email_html(officer_name: str, company_name: str, otp: str) -> str:

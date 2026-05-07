@@ -1,11 +1,4 @@
-"""
-backend/auth/service.py
-────────────────────────
-Business logic for signup, OTP verification, login.
-All DB operations go through mysql.connector.
-"""
-from __future__ import annotations
-
+import logging
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
@@ -19,6 +12,8 @@ from backend.auth.utils import (
     verify_password,
 )
 
+logger = logging.getLogger(__name__)
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -27,6 +22,8 @@ def _send_fresh_otp(cursor, conn, email: str, first_name: str) -> None:
     otp     = generate_otp()
     expires = datetime.utcnow() + timedelta(minutes=5)
 
+    logger.info(f"Generating new OTP for {email}")
+    
     cursor.execute(
         "UPDATE otp_codes SET used=TRUE WHERE email=%s AND used=FALSE",
         (email,),
@@ -36,12 +33,15 @@ def _send_fresh_otp(cursor, conn, email: str, first_name: str) -> None:
         (email, otp, expires.strftime("%Y-%m-%d %H:%M:%S")),
     )
     conn.commit()
+    
     try:
         send_otp_email(email, first_name, otp)
+        logger.info(f"OTP email sent successfully to {email}")
     except Exception as e:
+        logger.error(f"Failed to send OTP to {email}: {str(e)}")
         raise HTTPException(
             status_code=503,
-            detail=f"Failed to send verification email: {str(e)}. Please check your SMTP settings."
+            detail=f"Failed to send verification email. Please contact support."
         )
 
 
@@ -81,8 +81,12 @@ def signup(
             (first_name, last_name, email, phone, hashed),
         )
         conn.commit()
+        logger.info(f"User created: {email}")
         _send_fresh_otp(cursor, conn, email, first_name)
         return {"message": "Account created! Check your email for the verification code."}
+    except Exception as e:
+        logger.error(f"Signup error for {email}: {str(e)}")
+        raise
     finally:
         cursor.close()
         conn.close()
@@ -143,6 +147,8 @@ def verify_otp(email: str, otp_code: str) -> dict:
         user  = cursor.fetchone()
         token = create_jwt(user["id"], user["email"], user["role"])
 
+        logger.info(f"OTP verified successfully for {email}")
+
         return {
             "token":       token,
             "user_id":     user["id"],
@@ -152,6 +158,11 @@ def verify_otp(email: str, otp_code: str) -> dict:
             "role":        user["role"],
             "has_profile": bool(user.get("data_folder")),
         }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"OTP verification error for {email}: {str(e)}")
+        raise HTTPException(status_code=500, detail="An error occurred during verification.")
     finally:
         cursor.close()
         conn.close()
