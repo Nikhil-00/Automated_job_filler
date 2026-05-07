@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 import psycopg2
 from psycopg2 import pool, extras
 from backend.config import SUPABASE_DB_URL
@@ -57,18 +58,49 @@ def _get_pool() -> pool.SimpleConnectionPool:
         return _pool
     with _pool_lock:
         if _pool is None:
-            _pool = pool.SimpleConnectionPool(
-                minconn=1,
-                maxconn=20,
-                dsn=SUPABASE_DB_URL
-            )
+            max_retries = 3
+            last_err = None
+            for attempt in range(max_retries):
+                try:
+                    _pool = pool.SimpleConnectionPool(
+                        minconn=1,
+                        maxconn=20,
+                        dsn=SUPABASE_DB_URL
+                    )
+                    _log.info("[DB] Connection pool created successfully.")
+                    return _pool
+                except Exception as e:
+                    last_err = e
+                    _log.warning(f"[DB] Pool creation attempt {attempt+1} failed: {e}")
+                    if attempt < max_retries - 1:
+                        time.sleep(2 ** attempt) # Exponential backoff
+            
+            _log.critical(f"[DB] Failed to create connection pool after {max_retries} attempts: {last_err}")
+            raise last_err
     return _pool
 
 
 def get_connection():
-    """Return a pooled connection wrapped for dictionary support."""
-    conn = _get_pool().getconn()
-    return DictConnection(conn)
+    """Return a pooled connection wrapped for dictionary support with retry logic."""
+    max_retries = 3
+    last_err = None
+    
+    for attempt in range(max_retries):
+        try:
+            conn = _get_pool().getconn()
+            # Test if connection is still alive
+            if conn.closed:
+                 _get_pool().putconn(conn, close=True)
+                 continue
+            return DictConnection(conn)
+        except Exception as e:
+            last_err = e
+            _log.warning(f"[DB] get_connection attempt {attempt+1} failed: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(1) # Short wait before retry
+                
+    _log.error(f"[DB] Failed to get connection from pool: {last_err}")
+    raise last_err
 
 
 # ── One-time DB + table init ──────────────────────────────────────────────────

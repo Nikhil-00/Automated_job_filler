@@ -134,11 +134,11 @@ def get_cv_builder(user: dict = Depends(get_current_user)):
     db_user = get_user_by_id(user_id)
 
     if not db_user.get("data_folder"):
-        raise HTTPException(status_code=404, detail="CV not found.")
+        return {}
 
     cv_path = USER_DATA_DIR / db_user["data_folder"] / "cv_data.json"
     if not cv_path.exists():
-        raise HTTPException(status_code=404, detail="CV not found.")
+        return {}
 
     return json.loads(cv_path.read_text(encoding="utf-8"))
 
