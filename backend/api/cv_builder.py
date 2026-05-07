@@ -50,35 +50,15 @@ def _user_folder(email: str, first_name: str) -> Path:
 # ── OCR helper ─────────────────────────────────────────────────────────────────
 
 def _ocr(pdf_path: str) -> str:
-    """Extract text from PDF. Tries doctr first, falls back to pdfplumber."""
-    # doctr — preferred (layout-aware)
-    try:
-        from doctr.io import DocumentFile
-        from doctr.models import ocr_predictor
-        model  = ocr_predictor(pretrained=True)
-        doc    = DocumentFile.from_pdf(pdf_path)
-        result = model(doc)
-        lines: list[str] = []
-        for page in result.pages:
-            for block in page.blocks:
-                for line in block.lines:
-                    lines.append(" ".join(w.value for w in line.words))
-        text = "\n".join(lines).strip()
-        if text:
-            _log.info("[cv_builder] doctr OCR succeeded (%d chars).", len(text))
-            return text
-    except Exception as exc:
-        _log.debug("[cv_builder] doctr unavailable: %s", exc)
-
-    # pdfplumber — fallback
+    """Extract text from PDF using pdfplumber."""
     try:
         import pdfplumber
         with pdfplumber.open(pdf_path) as pdf:
             text = "\n".join(p.extract_text() or "" for p in pdf.pages).strip()
-        _log.info("[cv_builder] pdfplumber fallback (%d chars).", len(text))
+        _log.info("[cv_builder] pdfplumber extracted %d chars.", len(text))
         return text
     except Exception as exc:
-        _log.error("[cv_builder] pdfplumber also failed: %s", exc)
+        _log.error("[cv_builder] pdfplumber failed: %s", exc)
         return ""
 
 

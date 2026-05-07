@@ -48,27 +48,12 @@ def _get_user_folder(email: str, first_name: str) -> Path:
 
 
 def _ocr_pdf(pdf_path: str) -> str:
-    try:
-        from doctr.io import DocumentFile
-        from doctr.models import ocr_predictor
-
-        model  = ocr_predictor(pretrained=True)
-        doc    = DocumentFile.from_pdf(pdf_path)
-        result = model(doc)
-        lines: list[str] = []
-        for page in result.pages:
-            for block in page.blocks:
-                for line in block.lines:
-                    lines.append(" ".join(w.value for w in line.words))
-        return "\n".join(lines)
-    except ImportError:
-        pass
-
+    """Extract text from PDF using pdfplumber."""
     try:
         import pdfplumber
         with pdfplumber.open(pdf_path) as pdf:
-            return "\n".join(p.extract_text() or "" for p in pdf.pages)
-    except ImportError:
+            return "\n".join(p.extract_text() or "" for p in pdf.pages).strip()
+    except Exception:
         return ""
 
 

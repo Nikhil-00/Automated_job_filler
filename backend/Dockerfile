@@ -5,26 +5,10 @@ FROM python:3.10-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Install system dependencies for Playwright and OpenCV
+# Install basic system dependencies
 RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
-    libgl1 \
-    libglib2.0-0 \
-    libnss3 \
-    libnspr4 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libdrm2 \
-    libxkbcommon0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxrandr2 \
-    libgbm1 \
-    libpango-1.0-0 \
-    libcairo2 \
-    libasound2 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
