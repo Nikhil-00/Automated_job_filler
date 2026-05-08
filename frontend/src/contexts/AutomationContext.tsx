@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { LogEntry, CompanyEntry, CostSummary, StartAutomationParams } from '@/lib/mockApi';
 
-const API = (import.meta.env.VITE_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
-const WS  = (import.meta.env.VITE_WS_URL      ?? "ws://localhost:8000").replace(/\/$/, "");
+const API = import.meta.env.VITE_API_URL;
+const WS  = import.meta.env.VITE_WS_URL;
 
 interface AutomationState {
   isRunning:   boolean;

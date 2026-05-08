@@ -5,7 +5,7 @@ import AnimatedBackground from "@/components/AnimatedBackground";
 import GlowButton from "@/components/GlowButton";
 import NonBig4Dashboard from "./NonBig4Dashboard";
 
-const API = (import.meta.env.VITE_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
+const API = import.meta.env.VITE_API_URL;
 
 type Tab = "login" | "signup" | "forgot";
 type Step = "form" | "otp" | "done";

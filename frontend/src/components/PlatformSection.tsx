@@ -54,7 +54,7 @@ const PlatformSection = ({ platform, profileData }: PlatformSectionProps) => {
     setLoginStatus(platform, "opening");
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL ?? "http://localhost:8000"}/api/verify-credentials`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/verify-credentials`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

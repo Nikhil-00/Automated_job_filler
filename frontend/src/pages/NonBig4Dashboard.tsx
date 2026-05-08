@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import AgenticChatPanel from "../components/AgenticChatPanel";
 
-const API = (import.meta.env.VITE_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
+const API = import.meta.env.VITE_API_URL;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

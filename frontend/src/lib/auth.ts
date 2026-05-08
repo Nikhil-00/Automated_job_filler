@@ -4,7 +4,7 @@
  * Auth API calls + token storage helpers.
  */
 
-const API = (import.meta.env.VITE_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
+const API = import.meta.env.VITE_API_URL;
 
 // ─── Token helpers ────────────────────────────────────────────────────────────
 

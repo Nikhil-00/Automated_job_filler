@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { getToken } from "@/lib/auth";
 
-const API = (import.meta.env.VITE_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
+const API = import.meta.env.VITE_API_URL;
 
 interface Job {
   id:              string;
