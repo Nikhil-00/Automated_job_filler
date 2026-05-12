@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException
@@ -185,6 +186,10 @@ def activate(body: ActivateRequest, user: dict = Depends(_get_user)):
     finally:
         cur.close()
         conn.close()
+
+    # ── Retroactive matching: score this candidate against existing active jobs ──
+    from backend.services.candidate_matching import _match_one_candidate
+    threading.Thread(target=_match_one_candidate, args=(user_id,), daemon=True).start()
 
     return {
         "message": "Activated. You'll be automatically matched to relevant jobs.",
