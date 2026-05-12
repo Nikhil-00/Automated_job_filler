@@ -150,7 +150,7 @@ const Dashboard = () => {
 
 // ── Career Autopilot ────────────────────────────────────────────────────────────
 
-const API = import.meta.env.VITE_API_URL;
+const API: string = import.meta.env.VITE_API_URL ?? "";
 
 function YourJobOnUs({ expectedCtc }: { expectedCtc: string }) {
   const [expanded,    setExpanded]    = useState(false);

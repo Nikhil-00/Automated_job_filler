@@ -6,7 +6,7 @@ import AnimatedBackground from "@/components/AnimatedBackground";
 import GlowButton from "@/components/GlowButton";
 import { login, setToken } from "@/lib/auth";
 
-const API = import.meta.env.VITE_API_URL;
+const API: string = import.meta.env.VITE_API_URL ?? "";
 
 const Login = () => {
   const navigate = useNavigate();

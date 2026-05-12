@@ -7,7 +7,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { getToken } from "@/lib/auth";
 
-const API = import.meta.env.VITE_API_URL;
+const API: string = import.meta.env.VITE_API_URL ?? "";
 
 interface Job {
   id:              string;

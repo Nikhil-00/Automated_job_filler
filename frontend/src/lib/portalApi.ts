@@ -1,4 +1,4 @@
-const API = import.meta.env.VITE_API_URL;
+const API: string = import.meta.env.VITE_API_URL ?? "";
 
 const _authHeader = (): Record<string, string> => {
   const token = sessionStorage.getItem("auth_token");

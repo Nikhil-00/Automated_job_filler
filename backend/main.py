@@ -32,9 +32,18 @@ _log = logging.getLogger(__name__)
 app = FastAPI(title="NewAgeNaukri", version="2.0.0")
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
+import os as _os
+
+_raw_origins = _os.getenv("ALLOWED_ORIGINS", "*")
+_origins = (
+    ["*"]
+    if _raw_origins.strip() == "*"
+    else [o.strip() for o in _raw_origins.split(",") if o.strip()]
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
