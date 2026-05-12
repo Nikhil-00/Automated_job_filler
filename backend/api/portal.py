@@ -5,8 +5,8 @@ World Wide Jobs — job-seeker facing endpoints.
 
 GET  /api/portal/jobs                — browse active postings (with filters + match score)
 POST /api/portal/jobs/{job_id}/apply — apply to a posting
-GET  /api/portal/applied             — my applications
 GET  /api/portal/shortlisted         — jobs where candidate has been shortlisted
+GET  /api/portal/all-applications    — all portal applications + passive matches
 """
 from __future__ import annotations
 
@@ -15,7 +15,6 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 
 from backend.auth.routes  import get_current_user
 from backend.auth.service import get_user_by_id
@@ -27,51 +26,156 @@ router = APIRouter(prefix="/api/portal", tags=["portal"])
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _load_user_profile(user_id: int) -> dict:
+def _load_user_profile(user_id: int) -> tuple[dict, dict]:
+    """Return (profile_json, cv_data_json) for the user. Either can be {} if missing."""
     db_user = get_user_by_id(user_id)
+    profile: dict = {}
+    cv:      dict = {}
     if db_user and db_user.get("data_folder"):
-        p = USER_DATA_DIR / db_user["data_folder"] / "profile.json"
+        base = USER_DATA_DIR / db_user["data_folder"]
+        p = base / "profile.json"
         if p.exists():
             try:
-                return _json.loads(p.read_text(encoding="utf-8"))
+                profile = _json.loads(p.read_text(encoding="utf-8"))
             except Exception:
                 pass
-    return {}
+        c = base / "cv_data.json"
+        if c.exists():
+            try:
+                cv = _json.loads(c.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+    return profile, cv
 
 
-def _keyword_match(job: dict, profile: dict) -> int:
-    """Fast keyword overlap score (0-100) — no API cost."""
+def _total_exp_years(work_experience: list) -> float:
+    """Calculate total years of experience from work history."""
+    import re as _re
+    total = 0.0
+    now   = datetime.now()
+    for w in work_experience:
+        try:
+            start_raw = str(w.get("start_date") or "")
+            end_raw   = str(w.get("end_date")   or "")
+            start_y   = int(_re.search(r"\d{4}", start_raw).group()) if _re.search(r"\d{4}", start_raw) else None
+            if not start_y:
+                continue
+            if w.get("currently_working") or not end_raw or end_raw.lower() in ("present", "current", "now"):
+                end_y = now.year
+            else:
+                end_y = int(_re.search(r"\d{4}", end_raw).group()) if _re.search(r"\d{4}", end_raw) else now.year
+            total += max(0, end_y - start_y)
+        except Exception:
+            continue
+    return total
+
+
+def _score_for_portal(job: dict, profile: dict, cv: dict) -> int:
+    """
+    Score a candidate against a job using both profile.json and cv_data.json.
+
+    Signals:
+      Skills match   — 40 pts
+      Experience     — 20 pts
+      Role relevance — 20 pts
+      Location       — 10 pts
+      Education/cert — 10 pts
+    Returns 0–95. Returns 0 when candidate has no data at all.
+    """
     import re
-    STOP = {
-        "with", "and", "the", "for", "that", "this", "from", "have",
-        "will", "your", "able", "also", "about", "well", "must",
-    }
 
-    skills_val   = profile.get("skills", "")
-    skills_str   = " ".join(skills_val) if isinstance(skills_val, list) else str(skills_val or "")
-    profile_text = " ".join(filter(None, [
-        str(profile.get("current_job_title", "") or ""),
-        skills_str,
-        str(profile.get("years_of_experience", "") or ""),
-    ])).lower()
+    # ── Guard: no data → 0, not a fake number ────────────────────────────────
+    has_any_data = any([
+        profile.get("current_job_title"),
+        profile.get("skills"),
+        profile.get("years_of_experience"),
+        cv.get("skills"),
+        cv.get("work_experience"),
+        cv.get("education"),
+        cv.get("summary"),
+    ])
+    if not has_any_data:
+        return 0
+
+    score = 0
+
+    # ── Skills (40 pts) ──────────────────────────────────────────────────────
+    # Collect from both sources
+    raw_profile_skills = profile.get("skills") or []
+    if isinstance(raw_profile_skills, str):
+        raw_profile_skills = [s.strip() for s in raw_profile_skills.split(",") if s.strip()]
+    cv_tech = (cv.get("skills") or {}).get("technical") or []
+    cv_soft = (cv.get("skills") or {}).get("soft") or []
+    all_skills = list({s.lower().strip() for s in raw_profile_skills + cv_tech + cv_soft if s})
 
     skills_raw = job.get("skills") or "[]"
     try:
-        skills_list = _json.loads(skills_raw) if isinstance(skills_raw, str) else skills_raw
+        job_skills = [s.lower().strip() for s in (_json.loads(skills_raw) if isinstance(skills_raw, str) else skills_raw)]
     except Exception:
-        skills_list = []
+        job_skills = []
 
-    job_text = f"{job['title']} {' '.join(skills_list)}".lower()
+    if job_skills and all_skills:
+        matched = sum(1 for js in job_skills if any(js in cs or cs in js for cs in all_skills))
+        score  += int((matched / len(job_skills)) * 40)
+    elif all_skills:
+        # No structured skills on the job — fall back to keyword overlap against description
+        job_desc = (job.get("description") or "").lower()
+        kw_hits  = sum(1 for s in all_skills if len(s) > 3 and s in job_desc)
+        score   += min(20, kw_hits * 4)
 
-    profile_words = {w for w in re.findall(r"\b[a-z]{4,}\b", profile_text) if w not in STOP}
-    job_words     = [w for w in re.findall(r"\b[a-z]{4,}\b", job_text)     if w not in STOP]
+    # ── Experience (20 pts) ──────────────────────────────────────────────────
+    exp_years = float(profile.get("years_of_experience") or 0)
+    if not exp_years and cv.get("work_experience"):
+        exp_years = _total_exp_years(cv.get("work_experience") or [])
 
-    if not job_words or not profile_words:
-        return 50
+    exp_min = int(job.get("experience_min") or 0)
+    exp_max = int(job.get("experience_max") or 99)
 
-    matches = sum(1 for w in job_words if w in profile_words)
-    raw     = matches / len(job_words)
-    return min(95, int(25 + raw * 70))
+    if exp_min <= exp_years <= exp_max:
+        score += 20
+    elif exp_years > exp_max:
+        score += 10  # overqualified — partial credit
+    elif exp_years > 0:
+        score += 5   # has some experience but below requirement
+
+    # ── Role relevance (20 pts) ──────────────────────────────────────────────
+    STOP = {"with", "that", "this", "have", "from", "they", "will", "your", "been", "also", "into"}
+    job_title   = (job.get("title") or "").lower()
+    title_words = [w for w in re.findall(r"\b[a-z]{4,}\b", job_title) if w not in STOP]
+
+    candidate_role_text = " ".join(filter(None, [
+        (profile.get("current_job_title") or "").lower(),
+        (cv.get("summary") or "").lower(),
+        " ".join(
+            f"{w.get('title', '')} {w.get('company', '')}".lower()
+            for w in (cv.get("work_experience") or [])[:3]
+        ),
+    ]))
+
+    if title_words and candidate_role_text:
+        hits   = sum(1 for w in title_words if w in candidate_role_text)
+        score += int((hits / len(title_words)) * 20)
+
+    # ── Location (10 pts) ────────────────────────────────────────────────────
+    if job.get("work_mode") == "remote":
+        score += 10  # remote job — location irrelevant
+    else:
+        job_loc  = (job.get("location") or "").lower().strip()
+        cand_loc = (
+            profile.get("location")
+            or (cv.get("contact") or {}).get("location")
+            or ""
+        ).lower().strip()
+        if job_loc and cand_loc and (job_loc in cand_loc or cand_loc in job_loc):
+            score += 10
+
+    # ── Education / Certifications (10 pts) ──────────────────────────────────
+    if cv.get("education") or profile.get("education"):
+        score += 5
+    if cv.get("certifications"):
+        score += 5
+
+    return max(0, min(95, score))
 
 
 # ── Browse jobs ───────────────────────────────────────────────────────────────
@@ -96,16 +200,16 @@ def list_jobs(
     exp_max:         int = 99,
     sal_min:         int = 0,
     sal_max:         int = 0,
-    days_ago:        int = 0,          # 0=any, 1=today, 7=week, 30=month
-    sort_by:         str = "recent",   # recent | salary_high | salary_low | match
-    applied_filter:  str = "",          # "" | applied | not_applied
+    days_ago:        int = 0,
+    sort_by:         str = "recent",
+    applied_filter:  str = "",
     limit:           int = 20,
     offset:          int = 0,
     user: dict = Depends(get_current_user),
 ):
     """Return active job postings with keyword match scores."""
-    user_id = int(user["sub"])
-    profile = _load_user_profile(user_id)
+    user_id         = int(user["sub"])
+    profile, cv     = _load_user_profile(user_id)
 
     conditions = ["jp.is_active = TRUE", "jp.experience_min <= %s", "jp.experience_max >= %s"]
     params: list = [exp_max, exp_min]
@@ -191,10 +295,9 @@ def list_jobs(
             r["skills"] = _json.loads(r["skills"]) if r.get("skills") else []
         except Exception:
             r["skills"] = []
-        r["match_score"] = _keyword_match(r, profile)
+        r["match_score"] = _score_for_portal(r, profile, cv)
         r["applied"]     = r.pop("application_id") is not None
 
-    # Client-requested sort by match: re-sort this page by computed score
     if sort_by == "match":
         rows.sort(key=lambda r: r["match_score"], reverse=True)
 
@@ -225,9 +328,13 @@ def apply_to_job(job_id: str, user: dict = Depends(get_current_user)):
                 "INSERT INTO job_applications (id, job_id, user_id, applied_at) VALUES (%s, %s, %s, %s)",
                 (app_id, job_id, user_id, applied_at),
             )
+            # Remove any passive match now that it's a manual application
+            cur.execute(
+                "DELETE FROM candidate_job_matches WHERE job_id = %s AND user_id = %s",
+                (job_id, user_id)
+            )
             conn.commit()
         except Exception as exc:
-            # psycopg2 / pg error code for unique_violation is 23505
             pgcode = getattr(exc, "pgcode", None)
             if pgcode == "23505":
                 raise HTTPException(status_code=409, detail="You have already applied to this job.")
@@ -239,58 +346,15 @@ def apply_to_job(job_id: str, user: dict = Depends(get_current_user)):
     return {"status": "applied", "application_id": app_id}
 
 
-# ── My applications ───────────────────────────────────────────────────────────
-
-@router.get("/applied")
-def my_applications(user: dict = Depends(get_current_user)):
-    """Return all portal job applications for the logged-in user."""
-    user_id = int(user["sub"])
-
-    conn = get_connection()
-    cur  = conn.cursor(dictionary=True)
-    try:
-        cur.execute(
-            """
-            SELECT ja.id AS application_id, ja.applied_at, ja.status,
-                   ja.ai_match_score, ja.ai_score_reason,
-                   jp.id AS job_id, jp.title, jp.company_name, jp.location,
-                   jp.work_mode, jp.job_type, jp.salary_min, jp.salary_max,
-                   jp.salary_currency, jp.skills
-            FROM job_applications ja
-            JOIN job_postings jp ON jp.id = ja.job_id
-            WHERE ja.user_id = %s
-            ORDER BY ja.applied_at DESC
-            """,
-            (user_id,),
-        )
-        rows = cur.fetchall()
-    finally:
-        cur.close()
-        conn.close()
-
-    for r in rows:
-        if isinstance(r.get("applied_at"), datetime):
-            r["applied_at"] = r["applied_at"].isoformat()
-        try:
-            r["skills"] = _json.loads(r["skills"]) if r.get("skills") else []
-        except Exception:
-            r["skills"] = []
-
-    return rows
-
+# ── Shortlisted ───────────────────────────────────────────────────────────────
 
 @router.get("/shortlisted")
 def my_shortlisted_jobs(user: dict = Depends(get_current_user)):
-    """
-    Return all jobs where the job seeker has been shortlisted.
-    Combines portal applications (job_applications) and automation
-    applications (applied_jobs — linkedin/naukri/big4) in one list.
-    """
+    """Return all portal jobs where the candidate has been shortlisted."""
     user_id = int(user["sub"])
     conn = get_connection()
     cur  = conn.cursor(dictionary=True)
     try:
-        # Portal jobs shortlisted by company
         cur.execute(
             """
             SELECT ja.id           AS application_id,
@@ -316,39 +380,11 @@ def my_shortlisted_jobs(user: dict = Depends(get_current_user)):
             """,
             (user_id,),
         )
-        portal_rows = cur.fetchall()
-
-        # Automation jobs shortlisted by company (linkedin / naukri / big4_*)
-        cur.execute(
-            """
-            SELECT id          AS application_id,
-                   applied_at,
-                   ai_match_score,
-                   NULL        AS job_id,
-                   title,
-                   company,
-                   location,
-                   NULL        AS work_mode,
-                   NULL        AS job_type,
-                   NULL        AS salary_min,
-                   NULL        AS salary_max,
-                   NULL        AS salary_currency,
-                   NULL        AS skills,
-                   'automation' AS source,
-                   platform,
-                   url         AS job_url
-            FROM   applied_jobs
-            WHERE  user_id = %s AND status = 'shortlisted'
-            ORDER  BY applied_at DESC
-            """,
-            (user_id,),
-        )
-        auto_rows = cur.fetchall()
+        rows = cur.fetchall()
     finally:
         cur.close()
         conn.close()
 
-    rows = portal_rows + auto_rows
     for r in rows:
         if isinstance(r.get("applied_at"), datetime):
             r["applied_at"] = r["applied_at"].isoformat()
@@ -357,6 +393,80 @@ def my_shortlisted_jobs(user: dict = Depends(get_current_user)):
         except Exception:
             r["skills"] = []
 
-    # Sort combined list newest first
+    return rows
+
+
+# ── All applications ──────────────────────────────────────────────────────────
+
+@router.get("/all-applications")
+def all_applications(user: dict = Depends(get_current_user)):
+    """
+    Unified list of all applications for the logged-in user.
+    Merges:
+      1. Portal applications (job_applications table)
+      2. Passive AI matches (candidate_job_matches table — "Your Job on Us")
+    """
+    user_id = int(user["sub"])
+    conn = get_connection()
+    cur  = conn.cursor(dictionary=True)
+    try:
+        # 1. Portal applications
+        cur.execute(
+            """
+            SELECT ja.id           AS id,
+                   ja.applied_at,
+                   ja.status,
+                   ja.ai_match_score,
+                   ja.ai_score_reason,
+                   jp.title,
+                   jp.company_name AS company,
+                   jp.location,
+                   jp.work_mode,
+                   jp.job_type,
+                   'Portal'        AS source,
+                   NULL            AS platform,
+                   NULL            AS url
+            FROM   job_applications ja
+            JOIN   job_postings     jp ON jp.id = ja.job_id
+            WHERE  ja.user_id = %s
+            ORDER  BY ja.applied_at DESC
+            """,
+            (user_id,),
+        )
+        portal_rows = cur.fetchall()
+
+        # 2. Passive AI matches ("Your Job on Us")
+        cur.execute(
+            """
+            SELECT cjm.id           AS id,
+                   cjm.matched_at   AS applied_at,
+                   cjm.shortlist_status AS status,
+                   cjm.ai_score     AS ai_match_score,
+                   cjm.ai_reasoning AS ai_score_reason,
+                   jp.title,
+                   jp.company_name  AS company,
+                   jp.location,
+                   jp.work_mode,
+                   jp.job_type,
+                   'Match'          AS source,
+                   'Your Job on Us' AS platform,
+                   NULL             AS url
+            FROM   candidate_job_matches cjm
+            JOIN   job_postings          jp ON jp.id = cjm.job_id
+            WHERE  cjm.user_id = %s
+            ORDER  BY cjm.matched_at DESC
+            """,
+            (user_id,),
+        )
+        match_rows = cur.fetchall()
+    finally:
+        cur.close()
+        conn.close()
+
+    rows = portal_rows + match_rows
+    for r in rows:
+        if isinstance(r.get("applied_at"), datetime):
+            r["applied_at"] = r["applied_at"].isoformat()
+
     rows.sort(key=lambda x: x.get("applied_at") or "", reverse=True)
     return rows

@@ -142,7 +142,7 @@ def send_otp_email(to_email: str, name: str, otp: str) -> None:
           <td style="background:linear-gradient(135deg,#7c3aed,#2563eb);
                      padding:24px 32px;text-align:center">
             <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;
-                       letter-spacing:1px">AutoApply AI</h1>
+                       letter-spacing:1px">NewAgeNaukri</h1>
             <p style="margin:4px 0 0;color:rgba(255,255,255,.75);font-size:13px">
               Email Verification
             </p>
@@ -174,4 +174,4 @@ def send_otp_email(to_email: str, name: str, otp: str) -> None:
 </body>
 </html>
 """
-    send_email_robust(to_email, "Your AutoApply AI Verification Code", html)
+    send_email_robust(to_email, "Your NewAgeNaukri Verification Code", html)

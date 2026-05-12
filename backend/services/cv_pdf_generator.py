@@ -20,6 +20,7 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.platypus import (
     HRFlowable,
+    KeepTogether,
     Paragraph,
     SimpleDocTemplate,
     Table,
@@ -76,6 +77,7 @@ def _styles() -> dict[str, ParagraphStyle]:
         "section": ParagraphStyle(
             "section", fontName="Helvetica-Bold", fontSize=10,
             textColor=ACCENT, spaceBefore=10, spaceAfter=3,
+            keepWithNext=1,
         ),
         "job_sub": ParagraphStyle(
             "job_sub", fontName="Helvetica-Oblique", fontSize=8.5,
@@ -226,46 +228,49 @@ def generate_pdf(cv_data: dict) -> bytes:
         for exp in work_exp:
             end   = "Present" if exp.get("currently_working") else (exp.get("end_date") or "")
             dates = f"{exp.get('start_date', '')} – {end}".strip(" –")
-            story += _job_header(
+            entry = _job_header(
                 exp.get("title", ""), exp.get("company", ""),
                 dates, exp.get("location", ""), S,
             )
             for b in (exp.get("bullets") or []):
                 if b:
-                    story.append(_bullet(b, S))
+                    entry.append(_bullet(b, S))
+            story.append(KeepTogether(entry))
 
     # ── Education ─────────────────────────────────────────────────────────────
     education = cv_data.get("education") or []
     if education:
-        story += _section("Education", S)
+        edu_block = _section("Education", S)
         for edu in education:
             start = edu.get("start_year", "")
             end   = edu.get("end_year", "")
             years = f"{start} – {end}".strip(" –") if (start or end) else ""
-            story += _edu_header(
+            edu_block += _edu_header(
                 edu.get("degree", ""), edu.get("institution", ""),
                 years, edu.get("gpa", ""), S,
             )
             cw = (edu.get("relevant_coursework") or "").strip()
             if cw:
-                story.append(Paragraph(
+                edu_block.append(Paragraph(
                     f"<i>Relevant Coursework:</i> {_e(cw)}", S["job_sub"],
                 ))
+        story.append(KeepTogether(edu_block))
 
     # ── Skills ────────────────────────────────────────────────────────────────
     skills = cv_data.get("skills") or {}
     tech   = [s for s in (skills.get("technical") or []) if s]
     soft   = [s for s in (skills.get("soft") or []) if s]
     if tech or soft:
-        story += _section("Skills", S)
+        skills_block = _section("Skills", S)
         if tech:
-            story.append(Paragraph("Technical Skills", S["skill_label"]))
+            skills_block.append(Paragraph("Technical Skills", S["skill_label"]))
             chunk = 5
             for i in range(0, len(tech), chunk):
-                story.append(_bullet(", ".join(tech[i:i + chunk]), S))
+                skills_block.append(_bullet(", ".join(tech[i:i + chunk]), S))
         if soft:
-            story.append(Paragraph("Soft Skills", S["skill_label"]))
-            story.append(_bullet(", ".join(soft), S))
+            skills_block.append(Paragraph("Soft Skills", S["skill_label"]))
+            skills_block.append(_bullet(", ".join(soft), S))
+        story.append(KeepTogether(skills_block))
 
     # ── Projects ──────────────────────────────────────────────────────────────
     projects = cv_data.get("projects") or []
@@ -277,29 +282,35 @@ def generate_pdf(cv_data: dict) -> bytes:
             hdr   = f"<b>{_e(name)}</b>"
             if stack:
                 hdr += f"  |  <i>{_e(stack)}</i>"
-            story.append(Paragraph(hdr, S["proj_header"]))
-            if proj.get("description"):
-                story.append(_bullet(proj["description"], S))
+            entry = [Paragraph(hdr, S["proj_header"])]
+            for b in (proj.get("bullets") or []):
+                if b:
+                    entry.append(_bullet(b, S))
+            if proj.get("description") and not proj.get("bullets"):
+                entry.append(_bullet(proj["description"], S))
             if proj.get("outcome"):
-                story.append(_bullet(proj["outcome"], S))
+                entry.append(_bullet(proj["outcome"], S))
             if proj.get("link"):
-                story.append(Paragraph(f"<i>Link:</i> {_e(proj['link'])}", S["job_sub"]))
+                entry.append(Paragraph(f"<i>Link:</i> {_e(proj['link'])}", S["job_sub"]))
+            story.append(KeepTogether(entry))
 
     # ── Certifications ────────────────────────────────────────────────────────
     certs = cv_data.get("certifications") or []
     if certs:
-        story += _section("Certifications", S)
+        certs_block = _section("Certifications", S)
         for cert in certs:
             parts = [p for p in (cert.get("name"), cert.get("issuer"), cert.get("year")) if p]
-            story.append(_bullet("  |  ".join(parts), S))
+            certs_block.append(_bullet("  |  ".join(parts), S))
+        story.append(KeepTogether(certs_block))
 
     # ── Achievements ──────────────────────────────────────────────────────────
     achievements = cv_data.get("achievements") or []
     if achievements:
-        story += _section("Achievements & Awards", S)
+        ach_block = _section("Achievements & Awards", S)
         for ach in achievements:
             if ach.get("description"):
-                story.append(_bullet(ach["description"], S))
+                ach_block.append(_bullet(ach["description"], S))
+        story.append(KeepTogether(ach_block))
 
     doc.build(story)
     return buf.getvalue()

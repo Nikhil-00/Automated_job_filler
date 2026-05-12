@@ -48,6 +48,7 @@ export interface Project {
   tech_stack:  string;
   outcome:     string;
   link:        string;
+  bullets:     string[];
 }
 
 export interface Certification {

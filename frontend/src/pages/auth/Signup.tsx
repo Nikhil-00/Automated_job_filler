@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
-import { Eye, EyeOff, Loader2, UserPlus } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 import AnimatedBackground from "@/components/AnimatedBackground";
 import GlowButton from "@/components/GlowButton";
 import { signup } from "@/lib/auth";
@@ -70,11 +70,9 @@ const Signup = () => {
       >
         <div className="glass-card p-8 glow-blue rounded-2xl">
           {/* Header */}
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-violet-600 flex items-center justify-center">
-              <UserPlus className="w-5 h-5 text-white" />
-            </div>
-            <div>
+          <div className="flex flex-col items-center gap-2 mb-6">
+            <img src="/logo.png" alt="NewAgeNaukri" className="h-14 w-auto" />
+            <div className="text-center">
               <h1 className="text-xl font-bold text-foreground">Create Account</h1>
               <p className="text-xs text-muted-foreground">Job Seeker Portal</p>
             </div>

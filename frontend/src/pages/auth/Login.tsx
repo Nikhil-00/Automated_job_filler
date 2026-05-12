@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
-import { Eye, EyeOff, Loader2, LogIn, CheckCircle } from "lucide-react";
+import { Eye, EyeOff, Loader2, CheckCircle } from "lucide-react";
 import AnimatedBackground from "@/components/AnimatedBackground";
 import GlowButton from "@/components/GlowButton";
 import { login, setToken } from "@/lib/auth";
-import { getCVBuilder }  from "@/lib/cvBuilderApi";
 
 const API = import.meta.env.VITE_API_URL;
 
@@ -26,14 +25,9 @@ const Login = () => {
     try {
       const user = await login({ email, password });
       setToken(user.token);
-      try {
-        await getCVBuilder();
-        navigate("/dashboard");
-      } catch {
-        navigate("/cv-builder");
-      }
-    } catch (err: any) {
-      setError(err.message ?? "Login failed. Please try again.");
+      navigate("/dashboard");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Login failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -61,11 +55,9 @@ const Login = () => {
                 exit={{ opacity: 0, x: 20 }}
               >
                 {/* Header */}
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-violet-600 flex items-center justify-center">
-                    <LogIn className="w-5 h-5 text-white" />
-                  </div>
-                  <div>
+                <div className="flex flex-col items-center gap-2 mb-6">
+                  <img src="/logo.png" alt="NewAgeNaukri" className="h-14 w-auto" />
+                  <div className="text-center">
                     <h1 className="text-xl font-bold text-foreground">Welcome back</h1>
                     <p className="text-xs text-muted-foreground">Job Seeker Portal</p>
                   </div>
@@ -186,8 +178,8 @@ function CandidateForgotFlow({ initialEmail, onBack }: { initialEmail: string; o
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail ?? "Failed to send code.");
       setStep("otp");
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "An error occurred.");
     } finally {
       setLoading(false);
     }
@@ -213,8 +205,8 @@ function CandidateForgotFlow({ initialEmail, onBack }: { initialEmail: string; o
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail ?? "Reset failed.");
       setStep("done");
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "An error occurred.");
     } finally {
       setLoading(false);
     }

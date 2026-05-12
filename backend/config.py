@@ -40,7 +40,6 @@ SUPABASE_SERVICE_ROLE_KEY = _optional("SUPABASE_SERVICE_ROLE_KEY")
 
 # ── JWT ───────────────────────────────────────────────────────────────────────
 JWT_SECRET      = _require("JWT_SECRET")
-ADMIN_PASSWORD  = _require("ADMIN_PASSWORD")
 JWT_ALGORITHM   = "HS256"
 JWT_EXPIRE_DAYS = 7
 
@@ -74,5 +73,3 @@ VECTOR_DB_DIR.mkdir(exist_ok=True)
 
 OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
 
-# ── Browser ───────────────────────────────────────────────────────────────────
-BROWSER_HEADLESS = _optional("BROWSER_HEADLESS", "true").lower() == "true"

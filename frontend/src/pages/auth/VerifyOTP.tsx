@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { Loader2, MailCheck } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import AnimatedBackground from "@/components/AnimatedBackground";
 import GlowButton from "@/components/GlowButton";
 import { resendOtp, setToken, verifyOtp } from "@/lib/auth";
-import { getCVBuilder }                  from "@/lib/cvBuilderApi";
 
 const VerifyOTP = () => {
   const navigate = useNavigate();
@@ -21,7 +20,7 @@ const VerifyOTP = () => {
   useEffect(() => {
     if (!email) navigate("/auth/signup");
     inputRefs.current[0]?.focus();
-  }, []);
+  }, [navigate, email]);
 
   const handleDigit = (i: number, val: string) => {
     if (!/^\d?$/.test(val)) return;
@@ -55,12 +54,7 @@ const VerifyOTP = () => {
       const user = await verifyOtp({ email, otp_code: code });
       setToken(user.token);
       localStorage.removeItem("pending_verify_email");
-      try {
-        await getCVBuilder();
-        navigate("/dashboard");
-      } catch {
-        navigate("/cv-builder");
-      }
+      navigate("/dashboard");
     } catch (err: any) {
       setError(err.message ?? "Invalid code. Please try again.");
       setDigits(["", "", "", "", "", ""]);
@@ -97,9 +91,7 @@ const VerifyOTP = () => {
         className="w-full max-w-sm"
       >
         <div className="glass-card p-8 glow-purple rounded-2xl text-center">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-600 to-blue-600 mx-auto mb-5 flex items-center justify-center">
-            <MailCheck className="w-7 h-7 text-white" />
-          </div>
+          <img src="/logo.png" alt="NewAgeNaukri" className="h-14 w-auto mx-auto mb-4" />
 
           <h1 className="text-xl font-bold text-foreground mb-1">Check your email</h1>
           <p className="text-sm text-muted-foreground mb-1">

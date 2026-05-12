@@ -20,14 +20,53 @@ def _get_embedding(text: str) -> list[float]:
         _log.error("Failed to generate embedding: %s", exc)
         raise
 
-def upsert_candidate(user_id: int, summary: str, skills: list[str] | str):
+def upsert_candidate(
+    user_id:        int,
+    summary:        str,
+    skills:         list[str] | str,
+    education:      list[dict] | None = None,
+    work_experience: list[dict] | None = None,
+    certifications: list[dict] | None = None,
+):
     """
     Store or update candidate vector in PostgreSQL candidate_profile table.
+    Indexes summary + skills + education + work experience + certifications so
+    semantic search for terms like "IIT", "AWS", "Google" all work correctly.
     """
     try:
         skills_str = ", ".join(skills) if isinstance(skills, list) else str(skills)
-        text_content = f"Summary: {summary}\nSkills: {skills_str}"
-        
+
+        parts = [f"Summary: {summary}", f"Skills: {skills_str}"]
+
+        if education:
+            edu_lines = "; ".join(
+                f"{e.get('degree', '')} from {e.get('institution', '')} {e.get('end_year', '')}".strip()
+                for e in education
+                if e.get("institution")
+            )
+            if edu_lines:
+                parts.append(f"Education: {edu_lines}")
+
+        if work_experience:
+            work_lines = "; ".join(
+                f"{w.get('title', '')} at {w.get('company', '')}".strip(" at")
+                for w in work_experience[:5]
+                if w.get("title") or w.get("company")
+            )
+            if work_lines:
+                parts.append(f"Experience: {work_lines}")
+
+        if certifications:
+            cert_lines = ", ".join(
+                f"{c.get('name', '')} {c.get('issuer', '')}".strip()
+                for c in certifications
+                if c.get("name")
+            )
+            if cert_lines:
+                parts.append(f"Certifications: {cert_lines}")
+
+        text_content = "\n".join(parts)
+
         embedding = _get_embedding(text_content)
         
         conn = get_connection()

@@ -1,17 +1,34 @@
 import { useEffect, useState } from "react";
 import { useNavigate }         from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { Briefcase, CheckCircle, Loader2, Plus, Sparkles, ToggleLeft, ToggleRight, X } from "lucide-react";
+import { CheckCircle, Loader2, Plus, Sparkles, ToggleLeft, ToggleRight, X } from "lucide-react";
 
 import Navbar             from "@/components/Navbar";
 import AnimatedBackground from "@/components/AnimatedBackground";
-import ConfirmDialog      from "@/components/ConfirmDialog";
-import StepPlatform       from "@/components/StepPlatform";
 import WorldWideJobs      from "@/components/WorldWideJobs";
 import { getToken }       from "@/lib/auth";
 
-import { getMe, logout }                                   from "@/lib/auth";
-import { ProfileData, deleteProfileData, getProfileData }  from "@/lib/mockApi";
+import { getMe, logout }                from "@/lib/auth";
+import { ProfileData, getProfileData }  from "@/lib/mockApi";
+import { CVData, emptyCVData, getCVBuilder }               from "@/lib/cvBuilderApi";
+
+// ─── Profile completion (mirrors Profile.tsx calcCompletion) ─────────────────
+
+function computeCompletion(cv: CVData, profile: ProfileData | null): number {
+  let s = 0;
+  if (cv.contact.name)                         s += 10;
+  if (cv.contact.phone)                        s += 5;
+  if (cv.contact.email)                        s += 5;
+  if (cv.contact.location)                     s += 5;
+  if (profile?.currentCtc)                     s += 10;
+  if (profile?.expectedCtc)                    s += 10;
+  if (cv.summary)                              s += 10;
+  if (cv.work_experience.length > 0)           s += 20;
+  if (cv.education.length > 0)                 s += 10;
+  if (cv.skills.technical.length > 0)          s += 10;
+  if (cv.contact.linkedin || cv.contact.github) s += 5;
+  return Math.min(s, 100);
+}
 
 // ─── Build a ProfileData object from the saved profile.json ──────────────────
 
@@ -55,10 +72,8 @@ const Dashboard = () => {
   const [loading,     setLoading]     = useState(true);
   const [currentUser, setCurrentUser] = useState<DashboardUser | null>(null);
   const [profileData, setProfileData] = useState<ProfileData | null>(null);
+  const [cvData,      setCvData]      = useState<CVData>(emptyCVData());
 
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [resetting,        setResetting]        = useState(false);
-  const [resetError,       setResetError]       = useState("");
 
   useEffect(() => {
     (async () => {
@@ -71,12 +86,18 @@ const Dashboard = () => {
         };
         setCurrentUser(user);
 
-        try {
-          const saved = await getProfileData();
-          setProfileData(buildProfileData(user, saved));
-        } catch {
-          // profile.json missing — CV builder data exists but profile not yet back-filled
-          // Show dashboard without pre-filled profile data
+        const [profResult, cvResult] = await Promise.allSettled([
+          getProfileData(),
+          getCVBuilder(),
+        ]);
+
+        let profile: ProfileData | null = null;
+        if (profResult.status === "fulfilled") {
+          profile = buildProfileData(user, profResult.value);
+          setProfileData(profile);
+        }
+        if (cvResult.status === "fulfilled") {
+          setCvData(cvResult.value);
         }
       } catch {
         logout();
@@ -85,18 +106,6 @@ const Dashboard = () => {
       }
     })();
   }, []);
-
-  const handleReset = async () => {
-    setResetting(true);
-    setResetError("");
-    try {
-      await deleteProfileData();
-      navigate("/cv-builder");
-    } catch (err: unknown) {
-      setResetError(err instanceof Error ? err.message : "Reset failed. Please try again.");
-      setResetting(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -121,51 +130,25 @@ const Dashboard = () => {
       <Navbar
         currentStep={2}
         user={currentUser}
-        showReset={!!profileData}
-        onResetClick={() => { setResetError(""); setShowResetConfirm(true); }}
         onLogout={logout}
+        showAppNav
       />
 
-      {showResetConfirm && (
-        <ConfirmDialog
-          title="Reset Profile?"
-          message={
-            `This will permanently delete your saved CV and all profile data for ${currentUser?.email ?? "your account"}.` +
-            " You'll be taken to the CV Builder to start fresh. Your account will not be deleted."
-          }
-          confirmLabel="Yes, Reset Everything"
-          cancelLabel="Keep My Data"
-          onConfirm={handleReset}
-          onCancel={() => setShowResetConfirm(false)}
-          loading={resetting}
-          destructive
-        />
-      )}
-
-      <AnimatePresence>
-        {resetError && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className="fixed top-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg
-                       bg-red-500/20 border border-red-500/40 text-red-400 text-sm"
-          >
-            {resetError}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <main className="pt-20 pb-12 px-4 sm:px-6">
-        {profileData && <StepPlatform profileData={profileData} />}
+      <main className="pt-[72px] sm:pt-[80px] lg:pt-[88px] pb-12 px-4 sm:px-6">
         <YourJobOnUs expectedCtc={profileData?.expectedCtc ?? ""} />
-        <WorldWideJobs />
+        <WorldWideJobs
+          profileReady={
+            computeCompletion(cvData, profileData) >= 70 &&
+            !!profileData?.currentCtc &&
+            !!profileData?.expectedCtc
+          }
+        />
       </main>
     </div>
   );
 };
 
-// ── Your Job on Us ────────────────────────────────────────────────────────────
+// ── Career Autopilot ────────────────────────────────────────────────────────────
 
 const API = import.meta.env.VITE_API_URL;
 
@@ -240,34 +223,43 @@ function YourJobOnUs({ expectedCtc }: { expectedCtc: string }) {
   return (
     <div className="max-w-3xl mx-auto mt-6 mb-2">
       <div
-        className={`glass-card overflow-hidden border transition-colors ${
-          isActive ? "border-violet-500/40" : "border-border"
+        className={`overflow-hidden rounded-2xl border transition-colors shadow-sm ${
+          isActive
+            ? "border-violet-400/50 bg-gradient-to-br from-violet-50 via-white to-blue-50"
+            : "border-primary/20 bg-gradient-to-br from-blue-50 via-white to-violet-50"
         }`}
       >
         {/* Header row */}
         <button
           onClick={() => setExpanded(e => !e)}
-          className="w-full flex items-center justify-between p-4 hover:bg-muted/20 transition"
+          className="w-full flex items-center justify-between p-5 hover:bg-white/40 transition"
         >
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-violet-500/15 border border-violet-500/30 flex items-center justify-center shrink-0">
-              <Sparkles className="w-4 h-4 text-violet-400" />
+          <div className="flex items-start gap-4">
+            <div className="w-11 h-11 rounded-xl bg-primary/15 border border-primary/30 flex items-center justify-center shrink-0 shadow-sm">
+              <Sparkles className="w-5 h-5 text-primary" />
             </div>
             <div className="text-left">
-              <p className="text-sm font-semibold text-foreground leading-none">Your Job on Us</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <div className="flex items-center gap-2">
+                <p className="text-base font-bold text-foreground leading-none">Career Autopilot</p>
+                {isActive && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/15 border border-green-500/30 text-green-700 font-medium">
+                    Active
+                  </span>
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground mt-1">
                 {isActive
-                  ? `Active — matched to: ${roles.filter(Boolean).join(", ")}`
-                  : "Let us find and match you to jobs automatically"}
+                  ? `Matching your profile to: ${roles.filter(Boolean).join(", ")}`
+                  : "AI-powered matching — your profile gets sent to companies hiring for your target role"}
               </p>
+              {!isActive && (
+                <p className="text-xs text-primary/80 mt-1 font-medium">
+                  Set your target roles and let companies come to you — no applications needed.
+                </p>
+              )}
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {isActive && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-violet-500/15 border border-violet-500/30 text-violet-400 font-medium">
-                Active
-              </span>
-            )}
+          <div className="flex items-center gap-2 shrink-0 ml-4">
             {expanded
               ? <X className="w-4 h-4 text-muted-foreground" />
               : <Plus className="w-4 h-4 text-muted-foreground" />
@@ -295,14 +287,14 @@ function YourJobOnUs({ expectedCtc }: { expectedCtc: string }) {
                   <label className="text-xs text-muted-foreground font-medium">Target Job Titles (up to 3)</label>
                   {roles.map((r, i) => (
                     <div key={i} className="flex items-center gap-2">
-                      <div className="w-5 h-5 rounded-full bg-violet-500/15 border border-violet-500/30 flex items-center justify-center shrink-0">
-                        <span className="text-xs text-violet-400 font-bold">{i + 1}</span>
+                      <div className="w-5 h-5 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center shrink-0">
+                        <span className="text-xs text-primary font-bold">{i + 1}</span>
                       </div>
                       <input
                         value={r}
                         onChange={e => setRole(i, e.target.value)}
                         placeholder={["e.g. Data Scientist", "e.g. ML Engineer", "e.g. AI Engineer"][i]}
-                        className="flex-1 px-3 py-2 rounded-lg bg-input border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                        className="flex-1 px-3 py-2 rounded-lg bg-input border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
                       />
                     </div>
                   ))}
@@ -318,7 +310,7 @@ function YourJobOnUs({ expectedCtc }: { expectedCtc: string }) {
                     value={ctcMax}
                     onChange={e => setCtcMax(e.target.value)}
                     placeholder="e.g. 1500000"
-                    className="w-full px-3 py-2 rounded-lg bg-input border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                    className="w-full px-3 py-2 rounded-lg bg-input border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
                   />
                   <p className="text-xs text-muted-foreground mt-1">Pre-filled from your profile. Only used to filter out jobs outside your range.</p>
                 </div>
@@ -339,7 +331,7 @@ function YourJobOnUs({ expectedCtc }: { expectedCtc: string }) {
                       <button
                         onClick={handleSave}
                         disabled={saving}
-                        className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-violet-500/20 border border-violet-500/40 text-violet-400 text-sm font-semibold hover:bg-violet-500/30 transition disabled:opacity-50"
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary/15 border border-primary/40 text-primary text-sm font-semibold hover:bg-violet-500/30 transition disabled:opacity-50"
                       >
                         {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
                         Update Roles
@@ -356,7 +348,7 @@ function YourJobOnUs({ expectedCtc }: { expectedCtc: string }) {
                     <button
                       onClick={handleSave}
                       disabled={saving || !roles.some(r => r.trim())}
-                      className="flex items-center gap-1.5 px-5 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-violet-400 text-white text-sm font-semibold hover:opacity-90 transition disabled:opacity-50"
+                      className="flex items-center gap-1.5 px-5 py-2 rounded-lg bg-primary text-white hover:bg-primary/90 text-sm font-semibold hover:opacity-90 transition disabled:opacity-50"
                     >
                       {saving
                         ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Activating…</>

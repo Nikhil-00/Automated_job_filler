@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Building2, LogIn, UserPlus, Loader2, CheckCircle, Eye, EyeOff, Mail } from "lucide-react";
+import { LogIn, Loader2, CheckCircle, Eye, EyeOff } from "lucide-react";
 import AnimatedBackground from "@/components/AnimatedBackground";
 import GlowButton from "@/components/GlowButton";
 import NonBig4Dashboard from "./NonBig4Dashboard";
@@ -19,8 +19,8 @@ interface DashboardState {
 }
 
 export default function CompanyPortal() {
-  const [tab,       setTab]       = useState<Tab>("signup");
-  const [dashboard, setDashboard] = useState<DashboardState | null>(null);
+  const [tab,         setTab]         = useState<Tab>("login");
+  const [dashboard,   setDashboard]   = useState<DashboardState | null>(null);
   const [forgotEmail, setForgotEmail] = useState("");
 
   if (dashboard) {
@@ -35,7 +35,7 @@ export default function CompanyPortal() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
+    <div className="min-h-screen flex items-center justify-center px-4 py-8">
       <AnimatedBackground />
 
       <motion.div
@@ -44,60 +44,41 @@ export default function CompanyPortal() {
         transition={{ duration: 0.4 }}
         className="w-full max-w-md"
       >
-        {/* Header */}
-        <div className="text-center mb-6">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-yellow-600 to-yellow-400 flex items-center justify-center mx-auto mb-3">
-            <Building2 className="w-7 h-7 text-white" />
-          </div>
-          <h1 className="text-2xl font-bold text-foreground">Company Portal</h1>
-          <p className="text-sm text-muted-foreground mt-1">AutoApply AI — Partner Access</p>
-        </div>
-
-        <div className="glass-card rounded-2xl overflow-hidden">
-          {/* Tab switcher */}
-          {tab !== "forgot" && (
-            <div className="flex border-b border-border">
-              {(["signup", "login"] as Tab[]).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setTab(t)}
-                  className={`flex-1 py-3 text-sm font-semibold transition-colors
-                    ${tab === t
-                      ? "text-yellow-400 border-b-2 border-yellow-400 bg-yellow-500/5"
-                      : "text-muted-foreground hover:text-foreground"
-                    }`}
-                >
-                  {t === "signup"
-                    ? <span className="flex items-center justify-center gap-1.5"><UserPlus className="w-4 h-4" />Register</span>
-                    : <span className="flex items-center justify-center gap-1.5"><LogIn className="w-4 h-4" />Login</span>
-                  }
-                </button>
-              ))}
+        <div className="glass-card rounded-2xl p-8">
+          {/* Header */}
+          <div className="flex flex-col items-center gap-3 mb-7">
+            <img src="/logo.png" alt="NextGen Naukri" className="h-14 w-auto" />
+            <div className="text-center">
+              <h1 className="text-xl font-bold text-foreground">
+                {tab === "signup" ? "Create Recruiter Account" : tab === "forgot" ? "Reset Password" : "Welcome back"}
+              </h1>
+              <p className="text-sm text-muted-foreground mt-0.5">Company / Recruiter Portal</p>
             </div>
-          )}
-
-          <div className="p-7">
-            <AnimatePresence mode="wait">
-              {tab === "signup" && <SignupFlow key="signup" />}
-              {tab === "login" && (
-                <LoginForm
-                  key="login"
-                  onDashboard={setDashboard}
-                  onForgotPassword={(email) => {
-                    setForgotEmail(email);
-                    setTab("forgot");
-                  }}
-                />
-              )}
-              {tab === "forgot" && (
-                <ForgotFlow
-                  key="forgot"
-                  initialEmail={forgotEmail}
-                  onBack={() => setTab("login")}
-                />
-              )}
-            </AnimatePresence>
           </div>
+
+          <AnimatePresence mode="wait">
+            {tab === "signup" && (
+              <SignupFlow key="signup" onSwitchToLogin={() => setTab("login")} />
+            )}
+            {tab === "login" && (
+              <LoginForm
+                key="login"
+                onDashboard={setDashboard}
+                onSwitchToSignup={() => setTab("signup")}
+                onForgotPassword={(email) => {
+                  setForgotEmail(email);
+                  setTab("forgot");
+                }}
+              />
+            )}
+            {tab === "forgot" && (
+              <ForgotFlow
+                key="forgot"
+                initialEmail={forgotEmail}
+                onBack={() => setTab("login")}
+              />
+            )}
+          </AnimatePresence>
         </div>
       </motion.div>
     </div>
@@ -107,7 +88,7 @@ export default function CompanyPortal() {
 
 // ── Signup flow (form → OTP → done) ──────────────────────────────────────────
 
-function SignupFlow() {
+function SignupFlow({ onSwitchToLogin }: { onSwitchToLogin: () => void }) {
   const [step,         setStep]         = useState<Step>("form");
   const [companyName,  setCompanyName]  = useState("");
   const [officerName,  setOfficerName]  = useState("");
@@ -253,6 +234,14 @@ function SignupFlow() {
               : "Send Verification Code"
             }
           </GlowButton>
+
+          <p className="text-center text-sm text-muted-foreground mt-4">
+            Already have an account?{" "}
+            <button type="button" onClick={onSwitchToLogin}
+              className="text-yellow-500 font-semibold hover:underline">
+              Log in
+            </button>
+          </p>
         </form>
       )}
 
@@ -319,9 +308,10 @@ function SignupFlow() {
 
 // ── Login ─────────────────────────────────────────────────────────────────────
 
-function LoginForm({ onDashboard, onForgotPassword }: {
+function LoginForm({ onDashboard, onForgotPassword, onSwitchToSignup }: {
   onDashboard: (d: DashboardState) => void;
   onForgotPassword: (email: string) => void;
+  onSwitchToSignup: () => void;
 }) {
   const [email,    setEmail]    = useState("");
   const [password, setPassword] = useState("");
@@ -397,6 +387,14 @@ function LoginForm({ onDashboard, onForgotPassword }: {
             : <span className="flex items-center justify-center gap-2"><LogIn className="w-4 h-4" />Log In</span>
           }
         </GlowButton>
+
+        <p className="text-center text-sm text-muted-foreground mt-4">
+          New recruiter?{" "}
+          <button type="button" onClick={onSwitchToSignup}
+            className="text-yellow-500 font-semibold hover:underline">
+            Sign up
+          </button>
+        </p>
       </form>
     </motion.div>
   );

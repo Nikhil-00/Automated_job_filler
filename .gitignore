@@ -11,6 +11,10 @@ wheels/
 
 # Secrets
 .env
+*.pem
+*.key
+*.p12
+*.pfx
 
 # Generated files
 profile.json

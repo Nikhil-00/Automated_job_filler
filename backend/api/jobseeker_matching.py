@@ -171,7 +171,14 @@ def activate(body: ActivateRequest, user: dict = Depends(_get_user)):
         # ── Update Vector Store ───────────────────────────────────────────────
         try:
             from backend.utils.vector_store import upsert_candidate
-            upsert_candidate(user_id, cv_summary, skills_list)
+            upsert_candidate(
+                user_id,
+                cv_summary,
+                skills_list,
+                education=cv_data.get("education") or [],
+                work_experience=cv_data.get("work_experience") or [],
+                certifications=cv_data.get("certifications") or [],
+            )
         except Exception as v_exc:
             _log.warning("Vector store update failed for user %s: %s", user_id, v_exc)
 

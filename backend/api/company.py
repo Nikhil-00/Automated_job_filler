@@ -50,7 +50,6 @@ _PROHIBITED_RE = re.compile(
 )
 
 from backend.config import (
-    ADMIN_PASSWORD,
     EMAIL_ADDRESS,
     EMAIL_PASSWORD,
     JWT_ALGORITHM,
@@ -161,7 +160,7 @@ def _otp_email_html(officer_name: str, company_name: str, otp: str) -> str:
         <tr>
           <td style="background:linear-gradient(135deg,#ca8a04,#eab308);
                      padding:24px 32px;text-align:center">
-            <h1 style="margin:0;color:#fff;font-size:22px;font-weight:700">AutoApply AI</h1>
+            <h1 style="margin:0;color:#fff;font-size:22px;font-weight:700">NewAgeNaukri</h1>
             <p style="margin:4px 0 0;color:rgba(255,255,255,.8);font-size:13px">
               Company Portal — Email Verification
             </p>
@@ -211,7 +210,7 @@ def _admin_notification_html(company_name: str, officer_name: str, email: str, p
         <tr>
           <td style="background:linear-gradient(135deg,#7c3aed,#2563eb);
                      padding:24px 32px;text-align:center">
-            <h1 style="margin:0;color:#fff;font-size:22px;font-weight:700">AutoApply AI</h1>
+            <h1 style="margin:0;color:#fff;font-size:22px;font-weight:700">NewAgeNaukri</h1>
             <p style="margin:4px 0 0;color:rgba(255,255,255,.8);font-size:13px">
               New Company Signup Request
             </p>
@@ -366,7 +365,7 @@ def company_signup(req: SignupRequest):
     try:
         _send_email(
             req.email,
-            "AutoApply AI — Company Verification Code",
+            "NewAgeNaukri — Company Verification Code",
             _otp_email_html(req.officer_name, req.company_name, otp),
         )
     except Exception as e:
@@ -451,7 +450,7 @@ def company_resend_otp(req: ResendOtpRequest):
     try:
         _send_email(
             req.email,
-            "AutoApply AI — New Verification Code",
+            "NewAgeNaukri — New Verification Code",
             _otp_email_html(company["officer_name"], company["company_name"], otp),
         )
     except Exception as e:
@@ -538,7 +537,7 @@ def company_forgot_password(req: ForgotPasswordRequest):
     try:
         _send_email(
             req.email,
-            "AutoApply AI — Company Password Reset Code",
+            "NewAgeNaukri — Company Password Reset Code",
             _otp_email_html(company["officer_name"], company["company_name"], otp),
         )
     except Exception as e:
@@ -640,7 +639,7 @@ def _shortlist_email_html(
         <tr>
           <td style="background:linear-gradient(135deg,#166534,#16a34a);
                      padding:24px 32px;text-align:center">
-            <h1 style="margin:0;color:#fff;font-size:22px;font-weight:700">AutoApply AI</h1>
+            <h1 style="margin:0;color:#fff;font-size:22px;font-weight:700">NewAgeNaukri</h1>
             <p style="margin:4px 0 0;color:rgba(255,255,255,.8);font-size:13px">
               Profile Shortlisted
             </p>
@@ -686,7 +685,7 @@ def _shortlist_email_html(
               with further details about the next steps.
             </p>
             <p style="margin:16px 0 0;color:#64748b;font-size:12px">
-              Best of luck!<br/>— The AutoApply AI Team
+              Best of luck!<br/>— The NewAgeNaukri Team
             </p>
           </td>
         </tr>
@@ -709,7 +708,7 @@ def _credentials_email_html(officer_name: str, company_name: str, email: str, pa
              style="background:#1a1a2e;border-radius:16px;border:1px solid #2d2d4e;overflow:hidden">
         <tr>
           <td style="background:linear-gradient(135deg,#7c3aed,#2563eb);padding:24px 32px;text-align:center">
-            <h1 style="margin:0;color:#fff;font-size:22px;font-weight:700">AutoApply AI</h1>
+            <h1 style="margin:0;color:#fff;font-size:22px;font-weight:700">NewAgeNaukri</h1>
             <p style="margin:4px 0 0;color:rgba(255,255,255,.8);font-size:13px">Your Company Portal is Ready</p>
           </td>
         </tr>
@@ -717,7 +716,7 @@ def _credentials_email_html(officer_name: str, company_name: str, email: str, pa
           <td style="padding:32px">
             <p style="margin:0 0 8px;color:#e2e8f0;font-size:16px">Hi <strong>{officer_name}</strong>,</p>
             <p style="margin:0 0 20px;color:#94a3b8;font-size:14px">
-              <strong style="color:#e2e8f0">{company_name}</strong> has been approved on AutoApply AI.
+              <strong style="color:#e2e8f0">{company_name}</strong> has been approved on NewAgeNaukri.
               Use the credentials below to log in and start posting jobs.
             </p>
             <table width="100%" cellpadding="10" cellspacing="0"
@@ -2160,7 +2159,17 @@ _AGENTIC_TOOLS: list[dict] = [
                                 "description": "Candidate must have ALL of these skills.",
                             },
                             "education_keywords": {
-                                "type": "array", "items": {"type": "string"},
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": (
+                                    "Filter by college/university/institution name. "
+                                    "ALWAYS include both the abbreviation AND the full form for maximum coverage. "
+                                    "Examples: ['IIT', 'Indian Institute of Technology'], "
+                                    "['NIT', 'National Institute of Technology'], "
+                                    "['BITS', 'Birla Institute of Technology'], "
+                                    "['IIM', 'Indian Institute of Management']. "
+                                    "Backend handles alias matching — partial matches and spelling variations work."
+                                ),
                             },
                         },
                     },
@@ -2222,6 +2231,99 @@ _AGENTIC_TOOLS: list[dict] = [
         },
     },
 ]
+
+
+# ── Education alias map + matcher ─────────────────────────────────────────────
+#
+# Maps common abbreviations / short names to all known written forms.
+# Bidirectional: "IIT" matches "Indian Institute of Technology Bombay" AND vice-versa.
+#
+_EDU_ALIASES: dict[str, list[str]] = {
+    "iit":           ["indian institute of technology", "iit"],
+    "iitb":          ["iit bombay", "indian institute of technology bombay", "iitb"],
+    "iitd":          ["iit delhi", "indian institute of technology delhi", "iitd"],
+    "iitm":          ["iit madras", "indian institute of technology madras", "iitm"],
+    "iitkgp":        ["iit kharagpur", "indian institute of technology kharagpur", "iitkgp"],
+    "iitk":          ["iit kanpur", "indian institute of technology kanpur", "iitk"],
+    "iitr":          ["iit roorkee", "indian institute of technology roorkee", "iitr"],
+    "iitg":          ["iit guwahati", "indian institute of technology guwahati", "iitg"],
+    "iith":          ["iit hyderabad", "indian institute of technology hyderabad", "iith"],
+    "iitgn":         ["iit gandhinagar", "indian institute of technology gandhinagar", "iit ahmedabad"],
+    "nit":           ["national institute of technology", "nit", "regional engineering college", "rec"],
+    "bits":          ["birla institute of technology", "bits pilani", "bits goa", "bits hyderabad", "bits dubai"],
+    "iim":           ["indian institute of management", "iim"],
+    "iiit":          ["indian institute of information technology", "iiit"],
+    "iisc":          ["indian institute of science", "iisc", "iisc bangalore", "iisc bengaluru"],
+    "vit":           ["vellore institute of technology", "vit"],
+    "srm":           ["srm institute of science and technology", "srm university", "srm"],
+    "dtu":           ["delhi technological university", "delhi college of engineering", "dce"],
+    "nsit":          ["netaji subhas institute of technology", "nsit", "nsut"],
+    "nsut":          ["netaji subhas university of technology", "nsit", "nsut"],
+    "coep":          ["college of engineering pune", "coep"],
+    "vjti":          ["veermata jijabai technological institute", "vjti"],
+    "lpu":           ["lovely professional university", "lpu"],
+    "manipal":       ["manipal institute of technology", "manipal academy of higher education", "mahe", "mit manipal"],
+    "thapar":        ["thapar institute of engineering and technology", "thapar university"],
+    "amity":         ["amity university", "amity institute of technology"],
+    "pec":           ["punjab engineering college", "pec"],
+    "bhu":           ["banaras hindu university", "bhu", "iit bhu", "iit varanasi"],
+    "jadavpur":      ["jadavpur university", "ju"],
+    "anna":          ["anna university", "au chennai"],
+    "osmania":       ["osmania university", "ou hyderabad"],
+    "pune":          ["university of pune", "savitribai phule pune university", "sppu"],
+    "mumbai":        ["university of mumbai", "mumbai university"],
+    "delhi":         ["university of delhi", "du", "delhi university"],
+    "calcutta":      ["university of calcutta", "cu"],
+    "hyderabad":     ["university of hyderabad", "uoh"],
+    "mit":           ["massachusetts institute of technology", "mit"],
+    "stanford":      ["stanford university"],
+    "harvard":       ["harvard university"],
+}
+
+_EDU_STOP_WORDS = {"of", "the", "and", "in", "at", "a", "an", "for", "to", "by", "from", "university", "institute", "college"}
+
+
+def _edu_matches(keyword: str, institution: str) -> bool:
+    """
+    Return True if keyword matches institution using:
+      1. Direct bidirectional substring check
+      2. Alias map expansion (IIT ↔ Indian Institute of Technology)
+      3. Token overlap fallback (60 %+ shared meaningful words)
+    """
+    kw   = keyword.lower().strip()
+    inst = institution.lower().strip()
+    if not kw or not inst:
+        return False
+
+    # 1. Direct substring (both directions)
+    if kw in inst or inst in kw:
+        return True
+
+    # 2. Expand keyword through alias map and test every form
+    alias_forms: list[str] = _EDU_ALIASES.get(kw, [])
+    for form in alias_forms:
+        if form in inst or inst in form:
+            return True
+
+    # Also check: does keyword appear in ANY alias group?
+    for alias, forms in _EDU_ALIASES.items():
+        if kw == alias or kw in forms:
+            # kw is a known alias; test all forms for this group against institution
+            if alias in inst:
+                return True
+            for form in forms:
+                if form in inst or inst in form:
+                    return True
+
+    # 3. Token overlap fallback
+    kw_tokens   = set(kw.split()) - _EDU_STOP_WORDS
+    inst_tokens = set(inst.split()) - _EDU_STOP_WORDS
+    if kw_tokens and inst_tokens:
+        overlap = kw_tokens & inst_tokens
+        if len(overlap) / min(len(kw_tokens), len(inst_tokens)) >= 0.6:
+            return True
+
+    return False
 
 
 # ── Tool implementations ──────────────────────────────────────────────────────
@@ -2353,25 +2455,30 @@ def _tool_get_candidates(args: dict) -> dict:
             if not all(any(rs in cs or cs in rs for cs in avail) for rs in req_skills):
                 continue
         if edu_keywords:
-            institutions = [e.get("institution", "").lower() for e in (cv.get("education") or [])]
-            if not any(kw in inst for kw in edu_keywords for inst in institutions):
+            institutions = [e.get("institution", "") for e in (cv.get("education") or [])]
+            if not any(_edu_matches(kw, inst) for kw in edu_keywords for inst in institutions):
                 continue
 
         we = cv.get("work_experience") or [{}]
         results.append({
-            "candidate_id":     cand["user_id"],
-            "name":             f"{cand['first_name']} {cand['last_name']}",
-            "email":            cand["email"],
-            "status":           cand.get("status") or "applied",
-            "match_score":      score,
-            "match_reason":     reason,
-            "experience_years": exp_years,
-            "location":         (cv.get("contact") or {}).get("location") or "",
-            "current_title":    we[0].get("title", "") if we else "",
-            "skills_preview":   (cv.get("skills") or {}).get("technical") or [],
-            "current_salary":   cv.get("current_salary"),
-            "expected_salary":  cv.get("expected_salary"),
-            "notice_period":    cv.get("notice_period"),
+            "candidate_id":      cand["user_id"],
+            "name":              f"{cand['first_name']} {cand['last_name']}",
+            "email":             cand["email"],
+            "status":            cand.get("status") or "applied",
+            "match_score":       score,
+            "match_reason":      reason,
+            "experience_years":  exp_years,
+            "location":          (cv.get("contact") or {}).get("location") or "",
+            "current_title":     we[0].get("title", "") if we else "",
+            "skills_preview":    (cv.get("skills") or {}).get("technical") or [],
+            "current_salary":    cv.get("current_salary"),
+            "expected_salary":   cv.get("expected_salary"),
+            "notice_period":     cv.get("notice_period"),
+            "education_summary": [
+                f"{e.get('degree', '')} — {e.get('institution', '')} ({e.get('end_year', '')})".strip(" —()")
+                for e in (cv.get("education") or [])[:3]
+                if e.get("institution") or e.get("degree")
+            ],
         })
 
     results.sort(key=lambda x: x["match_score"], reverse=True)
@@ -2601,6 +2708,21 @@ If the recruiter asks ANYTHING outside this scope — coding questions, general 
 writing essays, math problems, jokes, or any other off-topic request — respond with exactly:
 "I can only help with recruitment tasks such as finding candidates, comparing profiles, or sending emails."
 Do NOT answer the off-topic question. Do NOT apologize at length. Just redirect in one sentence.
+
+EDUCATION QUERIES — When asked about college, university, degree, or institution:
+• ALWAYS use filters.education_keywords — NEVER put college names in the query field (query is for candidate names only)
+• Always pass BOTH the abbreviation AND the full form to maximise matches:
+    "IIT"    → education_keywords: ["IIT", "Indian Institute of Technology"]
+    "NIT"    → education_keywords: ["NIT", "National Institute of Technology"]
+    "BITS"   → education_keywords: ["BITS", "Birla Institute of Technology"]
+    "IIM"    → education_keywords: ["IIM", "Indian Institute of Management"]
+    "IIIT"   → education_keywords: ["IIIT", "Indian Institute of Information Technology"]
+    "IISc"   → education_keywords: ["IISc", "Indian Institute of Science"]
+    "VIT"    → education_keywords: ["VIT", "Vellore Institute of Technology"]
+• "How many from IIT?" → call get_candidates with filters.education_keywords = ["IIT", "Indian Institute of Technology"], count results
+• "Premier institutes" / "Tier 1" = IIT + NIT + BITS + IIM + IISc combined — run one call per group or combine all keywords in one filter
+• Each candidate returned in search mode has an education_summary field — use it to answer education questions directly without extra tool calls
+• For full degree details → call get_candidates(candidate_ids=[id]) for the individual profile
 
 STRICT RULES:
 1. Only use data from tool results. Never invent names, scores, or emails.

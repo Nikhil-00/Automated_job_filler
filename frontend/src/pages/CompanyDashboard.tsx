@@ -60,12 +60,6 @@ export default function CompanyDashboard({ token, companyName, officerName, comp
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setAgenticOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20 transition"
-            >
-              <Sparkles className="w-3.5 h-3.5" /> AI Recruiter
-            </button>
-            <button
               onClick={onLogout}
               className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition"
             >
@@ -83,6 +77,62 @@ export default function CompanyDashboard({ token, companyName, officerName, comp
         isOpen={agenticOpen}
         onClose={() => setAgenticOpen(false)}
       />
+
+      {/* ── AI Recruiter FAB ── */}
+      <AIRecruiterFAB onClick={() => setAgenticOpen(true)} />
+    </div>
+  );
+}
+
+function AIRecruiterFAB({ onClick }: { onClick: () => void }) {
+  const [visible, setVisible] = useState(false);
+  const [hovered, setHovered] = useState(false);
+
+  useEffect(() => {
+    const show = setTimeout(() => setVisible(true), 1200);
+    const hide = setTimeout(() => setVisible(false), 6000);
+    return () => { clearTimeout(show); clearTimeout(hide); };
+  }, []);
+
+  const isOpen = visible || hovered;
+
+  return (
+    <div className="fixed bottom-8 right-8 z-40 flex flex-col items-end gap-3">
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: 12, scale: 0.92 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 12, scale: 0.92 }}
+            transition={{ duration: 0.22, ease: "easeOut" }}
+            className="bg-white border border-yellow-200 shadow-xl rounded-2xl px-5 py-4 max-w-[240px]"
+            style={{ boxShadow: "0 8px 32px rgba(234,179,8,0.18)" }}
+          >
+            <p className="text-sm font-bold text-yellow-700 leading-snug">Stop reading resumes.</p>
+            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">I already did. Ask me who to shortlist — in seconds.</p>
+            <button
+              onClick={onClick}
+              className="mt-3 w-full text-xs font-semibold py-1.5 rounded-lg
+                         bg-yellow-500 text-white hover:bg-yellow-600 transition"
+            >
+              Try AI Recruiter →
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <motion.button
+        onClick={onClick}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        whileHover={{ scale: 1.12 }}
+        whileTap={{ scale: 0.95 }}
+        className="relative w-16 h-16 rounded-full bg-gradient-to-br from-yellow-500 to-yellow-400
+                   flex items-center justify-center shadow-xl border-2 border-white"
+        style={{ boxShadow: "0 8px 32px rgba(234,179,8,0.45)" }}
+      >
+        <span className="absolute inset-0 rounded-full bg-yellow-400 opacity-30 animate-ping" />
+        <Sparkles className="w-7 h-7 text-white relative z-10" />
+      </motion.button>
     </div>
   );
 }
@@ -201,11 +251,13 @@ function CandidatesPanel({ authH, companyKey }: { token: string; authH: Record<s
         body:    JSON.stringify({ action }),
       });
       if (!res.ok) { const d = await res.json(); alert(d.detail ?? "Failed."); return; }
-      setApplicants(prev => prev.map(a =>
-        a.application_id === appId
-          ? { ...a, status: action === "shortlist" ? "shortlisted" : "rejected" }
-          : a
-      ));
+      if (action === "reject") {
+        setApplicants(prev => prev.filter(a => a.application_id !== appId));
+      } else {
+        setApplicants(prev => prev.map(a =>
+          a.application_id === appId ? { ...a, status: "shortlisted" } : a
+        ));
+      }
     } finally { setActioning(null); }
   };
 

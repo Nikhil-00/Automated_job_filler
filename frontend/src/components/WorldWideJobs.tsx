@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Globe, Search, MapPin, Briefcase, Clock, DollarSign,
-  CheckCircle, Loader2, ChevronDown, ChevronUp, X, Filter, Building2,
+  CheckCircle, Loader2, ChevronDown, ChevronUp, X, Filter, Building2, Sparkles,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { getToken } from "@/lib/auth";
 
 const API = import.meta.env.VITE_API_URL;
@@ -64,7 +65,8 @@ const APPLIED_OPTS = [
 const cls = "w-full px-3 py-2 rounded-lg bg-input border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition";
 const LIMIT = 10;
 
-export default function WorldWideJobs() {
+export default function WorldWideJobs({ profileReady = true }: { profileReady?: boolean }) {
+  const navigate = useNavigate();
   const [jobs,       setJobs]       = useState<Job[]>([]);
   const [total,      setTotal]      = useState(0);
   const [loading,    setLoading]    = useState(true);
@@ -148,6 +150,10 @@ export default function WorldWideJobs() {
   ]);
 
   const applyToJob = async (jobId: string) => {
+    if (!profileReady) {
+      navigate("/profile", { state: { applyBlocked: true } });
+      return;
+    }
     const token = getToken();
     if (!token) return;
     setApplying(jobId);
@@ -185,16 +191,16 @@ export default function WorldWideJobs() {
   };
 
   const scoreColor = (s: number) =>
-    s >= 70 ? "text-green-400 bg-green-500/10 border-green-500/40"
-    : s >= 45 ? "text-yellow-400 bg-yellow-500/10 border-yellow-500/40"
-    : "text-muted-foreground bg-muted border-border";
+    s >= 70 ? "text-blue-700 bg-blue-50 border-blue-200"
+    : s >= 45 ? "text-amber-700 bg-amber-50 border-amber-200"
+    : "text-slate-500 bg-slate-100 border-slate-200";
 
   return (
     <section className="w-full max-w-5xl mx-auto px-4 py-10">
 
       {/* Section header */}
       <div className="flex items-center gap-3 mb-5">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600 to-violet-400 flex items-center justify-center">
+        <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
           <Globe className="w-5 h-5 text-white" />
         </div>
         <div>
@@ -274,7 +280,7 @@ export default function WorldWideJobs() {
             onClick={() => setDaysAgo(o.val)}
             className={`px-3 py-1.5 rounded-full text-xs font-medium border transition
               ${daysAgo === o.val
-                ? "bg-violet-500/15 border-violet-500/50 text-violet-400"
+                ? "bg-primary/10 border-primary/40 text-primary"
                 : "bg-muted border-border text-muted-foreground hover:text-foreground"
               }`}
           >
@@ -378,11 +384,21 @@ export default function WorldWideJobs() {
                         {/* Title + badges */}
                         <div className="flex items-center gap-2 flex-wrap mb-0.5">
                           <h3 className="font-semibold text-foreground">{job.title}</h3>
-                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${scoreColor(job.match_score)}`}>
-                            {job.match_score}% match
-                          </span>
+                          {job.match_score === 0 ? (
+                            <button
+                              onClick={e => { e.stopPropagation(); navigate("/profile"); }}
+                              className="flex items-center gap-1 text-xs font-medium px-2.5 py-0.5 rounded-full border border-violet-300 bg-violet-50 text-violet-700 hover:bg-violet-100 transition-colors"
+                            >
+                              <Sparkles className="w-3 h-3" />
+                              Complete profile to see your match
+                            </button>
+                          ) : (
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${scoreColor(job.match_score)}`}>
+                              {job.match_score}% match
+                            </span>
+                          )}
                           {job.applied && (
-                            <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/30 text-green-400 font-medium">
+                            <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/30 text-emerald-700 font-medium">
                               <CheckCircle className="w-3 h-3" /> Applied
                             </span>
                           )}
@@ -438,7 +454,7 @@ export default function WorldWideJobs() {
                       {/* Actions */}
                       <div className="flex flex-col items-end gap-2 shrink-0">
                         {job.applied ? (
-                          <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-500/10 border border-green-500/30 text-green-400">
+                          <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 border border-emerald-200 text-emerald-700">
                             <CheckCircle className="w-3.5 h-3.5" /> Applied
                           </span>
                         ) : (

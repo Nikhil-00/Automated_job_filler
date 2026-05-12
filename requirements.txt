@@ -1,18 +1,15 @@
-# Core automation
-playwright
-python-dotenv
-openai
-
 # Backend server
 fastapi
 uvicorn[standard]
 python-multipart
+python-dotenv
+
+# AI — CV parsing (OpenAI) + CV Builder (Groq primary, OpenAI fallback)
+openai
+groq
 
 # CV parsing
 pdfplumber
-
-# AI — CV Builder (Groq primary, OpenAI fallback already listed above)
-groq
 
 # ATS PDF generation
 reportlab
@@ -25,8 +22,3 @@ PyJWT
 
 # Validation
 pydantic
-
-# Job listings
-beautifulsoup4
-requests
-apscheduler
