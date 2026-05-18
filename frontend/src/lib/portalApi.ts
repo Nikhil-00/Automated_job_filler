@@ -1,7 +1,9 @@
+import { getToken } from "@/lib/auth";
+
 const API: string = import.meta.env.VITE_API_URL ?? "";
 
 const _authHeader = (): Record<string, string> => {
-  const token = sessionStorage.getItem("auth_token");
+  const token = getToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
