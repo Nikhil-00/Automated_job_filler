@@ -16,17 +16,17 @@ import { CVData, emptyCVData, getCVBuilder }               from "@/lib/cvBuilder
 
 function computeCompletion(cv: CVData, profile: ProfileData | null): number {
   let s = 0;
-  if (cv.contact.name)                         s += 10;
-  if (cv.contact.phone)                        s += 5;
-  if (cv.contact.email)                        s += 5;
-  if (cv.contact.location)                     s += 5;
-  if (profile?.currentCtc)                     s += 10;
-  if (profile?.expectedCtc)                    s += 10;
-  if (cv.summary)                              s += 10;
-  if (cv.work_experience.length > 0)           s += 20;
-  if (cv.education.length > 0)                 s += 10;
-  if (cv.skills.technical.length > 0)          s += 10;
-  if (cv.contact.linkedin || cv.contact.github) s += 5;
+  if (cv.contact?.name)                          s += 10;
+  if (cv.contact?.phone)                         s += 5;
+  if (cv.contact?.email)                         s += 5;
+  if (cv.contact?.location)                      s += 5;
+  if (profile?.currentCtc)                       s += 10;
+  if (profile?.expectedCtc)                      s += 10;
+  if (cv.summary)                                s += 10;
+  if ((cv.work_experience?.length ?? 0) > 0)     s += 20;
+  if ((cv.education?.length ?? 0) > 0)           s += 10;
+  if ((cv.skills?.technical?.length ?? 0) > 0)   s += 10;
+  if (cv.contact?.linkedin || cv.contact?.github) s += 5;
   return Math.min(s, 100);
 }
 

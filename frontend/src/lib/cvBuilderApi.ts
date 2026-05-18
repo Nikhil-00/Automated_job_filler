@@ -128,7 +128,18 @@ export async function getCVBuilder(): Promise<CVData> {
   if (res.status === 404) throw new Error("NOT_FOUND");
   const data = await res.json().catch(() => ({ detail: res.statusText }));
   if (!res.ok) throw new Error(data.detail ?? "Fetch failed");
-  return data as CVData;
+  const base = emptyCVData();
+  return {
+    ...base,
+    ...(data as Partial<CVData>),
+    contact:  { ...base.contact,  ...((data as CVData).contact  ?? {}) },
+    skills:   { ...base.skills,   ...((data as CVData).skills   ?? {}) },
+    work_experience: (data as CVData).work_experience  ?? base.work_experience,
+    education:       (data as CVData).education        ?? base.education,
+    projects:        (data as CVData).projects         ?? base.projects,
+    certifications:  (data as CVData).certifications   ?? base.certifications,
+    achievements:    (data as CVData).achievements     ?? base.achievements,
+  };
 }
 
 /** Persist cv_data + generate ATS PDF. */
