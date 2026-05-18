@@ -45,7 +45,7 @@ const Navbar = ({
           <img
             src="/logo.png"
             alt="NewAgeNaukri"
-            className="w-[180px] sm:w-[230px] lg:w-[270px] h-auto object-contain"
+            className="h-[52px] sm:h-[60px] lg:h-[68px] w-auto object-contain"
           />
         </div>
 
