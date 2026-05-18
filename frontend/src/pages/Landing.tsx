@@ -82,7 +82,7 @@ const Landing = () => {
             <img
               src="/logo.png"
               alt="NewAgeNaukri"
-              className="h-[40px] sm:h-[48px] lg:h-[54px] w-auto max-w-[200px] sm:max-w-[240px] lg:max-w-[280px] object-contain"
+              className="h-[55px] sm:h-[65px] lg:h-[72px] w-auto object-contain"
             />
           </div>
 
