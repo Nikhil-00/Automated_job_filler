@@ -10,9 +10,9 @@ const API: string = import.meta.env.VITE_API_URL ?? "";
 
 // ─── Token helpers ────────────────────────────────────────────────────────────
 
-export const getToken    = (): string | null => sessionStorage.getItem("auth_token");
-export const setToken    = (t: string)        => sessionStorage.setItem("auth_token", t);
-export const clearToken  = ()                 => sessionStorage.removeItem("auth_token");
+export const getToken    = (): string | null => localStorage.getItem("auth_token");
+export const setToken    = (t: string)        => localStorage.setItem("auth_token", t);
+export const clearToken  = ()                 => localStorage.removeItem("auth_token");
 export const isLoggedIn  = (): boolean        => !!getToken();
 
 export const getAuthHeaders = (): Record<string, string> => ({
