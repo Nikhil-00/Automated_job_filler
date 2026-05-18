@@ -288,20 +288,23 @@ def list_jobs(
         cur.close()
         conn.close()
 
+    clean = []
     for r in rows:
-        if isinstance(r.get("created_at"), datetime):
-            r["created_at"] = r["created_at"].isoformat()
+        row = dict(r)
+        if isinstance(row.get("created_at"), datetime):
+            row["created_at"] = row["created_at"].isoformat()
         try:
-            r["skills"] = _json.loads(r["skills"]) if r.get("skills") else []
+            row["skills"] = _json.loads(row["skills"]) if row.get("skills") else []
         except Exception:
-            r["skills"] = []
-        r["match_score"] = _score_for_portal(r, profile, cv)
-        r["applied"]     = r.pop("application_id") is not None
+            row["skills"] = []
+        row["match_score"] = _score_for_portal(row, profile, cv)
+        row["applied"]     = row.pop("application_id") is not None
+        clean.append(row)
 
     if sort_by == "match":
-        rows.sort(key=lambda r: r["match_score"], reverse=True)
+        clean.sort(key=lambda r: r["match_score"], reverse=True)
 
-    return {"jobs": rows, "total": total, "limit": limit, "offset": offset}
+    return {"jobs": clean, "total": total, "limit": limit, "offset": offset}
 
 
 # ── Apply ─────────────────────────────────────────────────────────────────────
@@ -385,15 +388,18 @@ def my_shortlisted_jobs(user: dict = Depends(get_current_user)):
         cur.close()
         conn.close()
 
+    result = []
     for r in rows:
-        if isinstance(r.get("applied_at"), datetime):
-            r["applied_at"] = r["applied_at"].isoformat()
+        row = dict(r)
+        if isinstance(row.get("applied_at"), datetime):
+            row["applied_at"] = row["applied_at"].isoformat()
         try:
-            r["skills"] = _json.loads(r["skills"]) if r.get("skills") else []
+            row["skills"] = _json.loads(row["skills"]) if row.get("skills") else []
         except Exception:
-            r["skills"] = []
+            row["skills"] = []
+        result.append(row)
 
-    return rows
+    return result
 
 
 # ── All applications ──────────────────────────────────────────────────────────
@@ -463,7 +469,7 @@ def all_applications(user: dict = Depends(get_current_user)):
         cur.close()
         conn.close()
 
-    rows = portal_rows + match_rows
+    rows = [dict(r) for r in portal_rows] + [dict(r) for r in match_rows]
     for r in rows:
         if isinstance(r.get("applied_at"), datetime):
             r["applied_at"] = r["applied_at"].isoformat()

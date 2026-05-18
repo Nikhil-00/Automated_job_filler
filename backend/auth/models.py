@@ -5,6 +5,8 @@ Pydantic request / response models for the auth routes.
 """
 from __future__ import annotations
 
+from typing import Optional
+
 from pydantic import BaseModel
 
 
@@ -43,8 +45,8 @@ class ResetPasswordRequest(BaseModel):
 class AuthResponse(BaseModel):
     token:       str
     user_id:     int
-    first_name:  str
-    last_name:   str
+    first_name:  Optional[str] = ""
+    last_name:   Optional[str] = ""
     email:       str
     role:        str
     has_profile: bool
@@ -52,8 +54,8 @@ class AuthResponse(BaseModel):
 
 class UserInfo(BaseModel):
     user_id:     int
-    first_name:  str
-    last_name:   str
+    first_name:  Optional[str] = ""
+    last_name:   Optional[str] = ""
     email:       str
     role:        str
     has_profile: bool

@@ -796,7 +796,9 @@ export default function Profile() {
             </div>
             <div>
               <h1 className="text-2xl font-extrabold text-foreground">
-                {user ? `${user.first_name} ${user.last_name}` : "My Profile"}
+                {user
+                  ? (`${user.first_name ?? ""} ${user.last_name ?? ""}`.trim() || "My Profile")
+                  : "My Profile"}
               </h1>
               <p className="text-sm text-muted-foreground">{user?.email}</p>
             </div>
