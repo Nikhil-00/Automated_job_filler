@@ -53,17 +53,17 @@ const NOTICE_OPTIONS = [
 
 function calcCompletion(cv: CVData, comp: Compensation): number {
   let score = 0;
-  if (cv.contact.name)                      score += 10;
-  if (cv.contact.phone)                     score += 5;
-  if (cv.contact.email)                     score += 5;
-  if (cv.contact.location)                  score += 5;
-  if (comp.current_salary)                  score += 10;
-  if (comp.expected_salary)                 score += 10;
-  if (cv.summary)                           score += 10;
-  if (cv.work_experience.length > 0)        score += 20;
-  if (cv.education.length > 0)              score += 10;
-  if (cv.skills.technical.length > 0)       score += 10;
-  if (cv.contact.linkedin || cv.contact.github) score += 5;
+  if (cv.contact?.name)                            score += 10;
+  if (cv.contact?.phone)                           score += 5;
+  if (cv.contact?.email)                           score += 5;
+  if (cv.contact?.location)                        score += 5;
+  if (comp.current_salary)                         score += 10;
+  if (comp.expected_salary)                        score += 10;
+  if (cv.summary)                                  score += 10;
+  if ((cv.work_experience?.length ?? 0) > 0)       score += 20;
+  if ((cv.education?.length ?? 0) > 0)             score += 10;
+  if ((cv.skills?.technical?.length ?? 0) > 0)     score += 10;
+  if (cv.contact?.linkedin || cv.contact?.github)  score += 5;
   return Math.min(score, 100);
 }
 
@@ -754,7 +754,7 @@ export default function Profile() {
   }
 
   const initials = user
-    ? `${user.first_name.charAt(0)}${user.last_name?.charAt(0) ?? ""}`.toUpperCase()
+    ? `${(user.first_name ?? "").charAt(0)}${(user.last_name ?? "").charAt(0)}`.toUpperCase()
     : "?";
 
   return (
@@ -1163,11 +1163,11 @@ export default function Profile() {
                 )}
               </AnimatePresence>
 
-              {cv.work_experience.length === 0 && expEditing !== "new" && (
+              {(cv.work_experience?.length ?? 0) === 0 && expEditing !== "new" && (
                 <EmptyState message="No work experience added yet. Click Add to get started." />
               )}
 
-              {cv.work_experience.map((exp, i) => (
+              {(cv.work_experience ?? []).map((exp, i) => (
                 <div key={exp.id} className="border border-border rounded-xl overflow-hidden">
                   {expEditing === i ? (
                     <div className="p-4 space-y-3">
@@ -1289,11 +1289,11 @@ export default function Profile() {
                 )}
               </AnimatePresence>
 
-              {cv.education.length === 0 && eduEditing !== "new" && (
+              {(cv.education?.length ?? 0) === 0 && eduEditing !== "new" && (
                 <EmptyState message="No education added yet. Click Add to get started." />
               )}
 
-              {cv.education.map((edu, i) => (
+              {(cv.education ?? []).map((edu, i) => (
                 <div key={edu.id} className="border border-border rounded-xl overflow-hidden">
                   {eduEditing === i ? (
                     <div className="p-4 space-y-3">
@@ -1390,9 +1390,9 @@ export default function Profile() {
                 <div className="space-y-4">
                   <div>
                     <p className={LABEL_CLS}>Technical Skills</p>
-                    {cv.skills.technical.length > 0 ? (
+                    {(cv.skills?.technical?.length ?? 0) > 0 ? (
                       <div className="flex flex-wrap gap-2 mt-1">
-                        {cv.skills.technical.map(s => (
+                        {(cv.skills?.technical ?? []).map(s => (
                           <span key={s}
                             className="px-2.5 py-1 rounded-full text-xs font-medium
                                        bg-primary/10 text-primary border border-primary/20">
@@ -1406,9 +1406,9 @@ export default function Profile() {
                   </div>
                   <div>
                     <p className={LABEL_CLS}>Soft Skills</p>
-                    {cv.skills.soft.length > 0 ? (
+                    {(cv.skills?.soft?.length ?? 0) > 0 ? (
                       <div className="flex flex-wrap gap-2 mt-1">
-                        {cv.skills.soft.map(s => (
+                        {(cv.skills?.soft ?? []).map(s => (
                           <span key={s}
                             className="px-2.5 py-1 rounded-full text-xs font-medium
                                        bg-muted text-muted-foreground border border-border">
@@ -1479,11 +1479,11 @@ export default function Profile() {
                 )}
               </AnimatePresence>
 
-              {cv.projects.length === 0 && projEditing !== "new" && (
+              {(cv.projects?.length ?? 0) === 0 && projEditing !== "new" && (
                 <EmptyState message="No projects added yet. Click Add to get started." />
               )}
 
-              {cv.projects.map((p, i) => (
+              {(cv.projects ?? []).map((p, i) => (
                 <div key={p.id} className="border border-border rounded-xl overflow-hidden">
                   {projEditing === i ? (
                     <div className="p-4 space-y-3">

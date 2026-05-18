@@ -437,15 +437,15 @@ export default function WorldWideJobs({ profileReady = true }: { profileReady?: 
                         </div>
 
                         {/* Skills */}
-                        {job.skills.length > 0 && (
+                        {(job.skills?.length ?? 0) > 0 && (
                           <div className="flex flex-wrap gap-1 mt-2">
-                            {job.skills.slice(0, 6).map(s => (
+                            {(job.skills ?? []).slice(0, 6).map(s => (
                               <span key={s} className="text-xs px-2 py-0.5 rounded-full bg-muted border border-border text-muted-foreground">
                                 {s}
                               </span>
                             ))}
-                            {job.skills.length > 6 && (
-                              <span className="text-xs text-muted-foreground self-center">+{job.skills.length - 6}</span>
+                            {(job.skills?.length ?? 0) > 6 && (
+                              <span className="text-xs text-muted-foreground self-center">+{(job.skills?.length ?? 0) - 6}</span>
                             )}
                           </div>
                         )}

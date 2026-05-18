@@ -150,9 +150,9 @@ const ShortlistedPortal = () => {
                   </div>
 
                   {/* Skills */}
-                  {job.skills.length > 0 && (
+                  {(job.skills?.length ?? 0) > 0 && (
                     <div className="flex flex-wrap gap-1.5">
-                      {job.skills.slice(0, 8).map((s) => (
+                      {(job.skills ?? []).slice(0, 8).map((s) => (
                         <span
                           key={s}
                           className="px-2 py-0.5 rounded-full text-xs bg-primary/10 border border-primary/20 text-primary"
@@ -160,9 +160,9 @@ const ShortlistedPortal = () => {
                           {s}
                         </span>
                       ))}
-                      {job.skills.length > 8 && (
+                      {(job.skills?.length ?? 0) > 8 && (
                         <span className="px-2 py-0.5 rounded-full text-xs text-muted-foreground">
-                          +{job.skills.length - 8} more
+                          +{(job.skills?.length ?? 0) - 8} more
                         </span>
                       )}
                     </div>

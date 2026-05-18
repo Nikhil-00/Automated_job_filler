@@ -118,7 +118,7 @@ const Navbar = ({
             >
               <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-secondary
                               flex items-center justify-center text-sm font-bold text-white flex-shrink-0">
-                {`${user.first_name.charAt(0)}${user.last_name?.charAt(0) ?? ""}`.toUpperCase()}
+                {`${(user.first_name ?? "").charAt(0)}${(user.last_name ?? "").charAt(0)}`.toUpperCase()}
               </div>
               <span className="text-base font-medium text-foreground">
                 {user.first_name}

@@ -179,8 +179,8 @@ const AppliedJobs = () => {
     if (search) {
       const q = search.toLowerCase();
       return (
-        a.title.toLowerCase().includes(q) ||
-        a.company.toLowerCase().includes(q) ||
+        (a.title ?? "").toLowerCase().includes(q) ||
+        (a.company ?? "").toLowerCase().includes(q) ||
         (a.location ?? "").toLowerCase().includes(q)
       );
     }
