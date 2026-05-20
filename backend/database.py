@@ -51,6 +51,14 @@ _pool: pool.SimpleConnectionPool | None = None
 _pool_lock = threading.Lock()
 
 
+_KEEPALIVE_KWARGS = {
+    "keepalives":          1,
+    "keepalives_idle":     30,   # send first probe after 30 s of inactivity
+    "keepalives_interval": 10,   # resend every 10 s
+    "keepalives_count":    5,    # drop after 5 failed probes
+}
+
+
 def _get_pool() -> pool.SimpleConnectionPool:
     global _pool
     if _pool is not None:
@@ -60,14 +68,25 @@ def _get_pool() -> pool.SimpleConnectionPool:
             _pool = pool.SimpleConnectionPool(
                 minconn=1,
                 maxconn=20,
-                dsn=SUPABASE_DB_URL
+                dsn=SUPABASE_DB_URL,
+                **_KEEPALIVE_KWARGS,
             )
     return _pool
 
 
 def get_connection():
     """Return a pooled connection wrapped for dictionary support."""
-    conn = _get_pool().getconn()
+    p = _get_pool()
+    conn = p.getconn()
+    try:
+        conn.cursor().execute("SELECT 1")
+    except Exception:
+        _log.warning("Stale DB connection detected; replacing it.")
+        try:
+            p.putconn(conn, close=True)
+        except Exception:
+            pass
+        conn = p.getconn()
     return DictConnection(conn)
 
 
