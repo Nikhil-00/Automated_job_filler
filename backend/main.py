@@ -20,6 +20,7 @@ from backend.api.company import router as company_router
 from backend.api.cv_builder import router as cv_builder_router
 from backend.api.portal import router as portal_router
 from backend.api.jobseeker_matching import router as jobseeker_matching_router
+from backend.api.admin import router as admin_router
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -66,6 +67,7 @@ app.include_router(company_router)
 app.include_router(cv_builder_router)
 app.include_router(portal_router)
 app.include_router(jobseeker_matching_router)
+app.include_router(admin_router)
 
 
 # ── Health check ──────────────────────────────────────────────────────────────

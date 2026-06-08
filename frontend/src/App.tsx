@@ -14,6 +14,7 @@ import AppliedJobs       from "./pages/AppliedJobs";
 import ShortlistedPortal from "./pages/ShortlistedPortal";
 import NotFound          from "./pages/NotFound";
 import CompanyPortal     from "./pages/CompanyPortal";
+import AdminPortal       from "./pages/AdminPortal";
 import ProtectedRoute    from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient();
@@ -50,6 +51,9 @@ const App = () => (
             path="/shortlisted"
             element={<ProtectedRoute><ShortlistedPortal /></ProtectedRoute>}
           />
+
+          {/* ── Admin (hidden, no links) ── */}
+          <Route path="/admin" element={<AdminPortal />} />
 
           {/* ── Fallback ── */}
           <Route path="*" element={<NotFound />} />
