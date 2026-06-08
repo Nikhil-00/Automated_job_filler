@@ -150,13 +150,45 @@ def get_jobseekers(_: dict = Depends(_get_admin_user)):
             FROM candidate_profile
         """)
         with_profile = cur.fetchone()["with_profile"]
+
+        cur.execute("""
+            SELECT
+                u.id,
+                u.first_name,
+                u.last_name,
+                u.email,
+                u.created_at,
+                CASE WHEN cp.user_id IS NOT NULL THEN TRUE ELSE FALSE END AS has_profile,
+                COALESCE(cp.is_active, FALSE) AS autopilot_on,
+                cp.current_job_title,
+                cp.years_experience
+            FROM user_credentials u
+            LEFT JOIN candidate_profile cp ON cp.user_id = u.id
+            WHERE u.role = 'user'
+            ORDER BY u.created_at DESC
+        """)
+        candidates = cur.fetchall()
     finally:
         cur.close()
         conn.close()
 
+    candidate_list = []
+    for c in candidates:
+        candidate_list.append({
+            "id":               c["id"],
+            "name":             f"{c['first_name']} {c['last_name']}".strip(),
+            "email":            c["email"],
+            "joined":           c["created_at"].isoformat() if c.get("created_at") else None,
+            "has_profile":      c["has_profile"],
+            "autopilot_on":     c["autopilot_on"],
+            "current_job_title": c.get("current_job_title") or "—",
+            "years_experience": c.get("years_experience"),
+        })
+
     return {
-        "total_candidates":    total,
-        "with_profile":        with_profile,
-        "autopilot_on":        autopilot_on,
-        "autopilot_off":       with_profile - autopilot_on,
+        "total_candidates": total,
+        "with_profile":     with_profile,
+        "autopilot_on":     autopilot_on,
+        "autopilot_off":    with_profile - autopilot_on,
+        "candidates":       candidate_list,
     }

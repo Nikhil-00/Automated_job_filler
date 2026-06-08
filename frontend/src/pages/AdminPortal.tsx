@@ -30,11 +30,23 @@ interface RecruiterStats {
   recruiters:       Recruiter[];
 }
 
+interface Candidate {
+  id:                number;
+  name:              string;
+  email:             string;
+  joined:            string | null;
+  has_profile:       boolean;
+  autopilot_on:      boolean;
+  current_job_title: string;
+  years_experience:  number | null;
+}
+
 interface JobseekerStats {
   total_candidates: number;
   with_profile:     number;
   autopilot_on:     number;
   autopilot_off:    number;
+  candidates:       Candidate[];
 }
 
 // ── Token helpers (sessionStorage — gone on tab close) ────────────────────────
@@ -338,6 +350,61 @@ function JobSeekersTab() {
           <span>Autopilot active</span>
           <span className="text-green-400">{data.autopilot_on}</span>
         </div>
+      </div>
+
+      {/* Candidate table */}
+      <div className="bg-[#13131f] border border-[#2a2a40] rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-[#2a2a40]">
+          <p className="text-sm font-medium text-white">All Candidates</p>
+        </div>
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-[#1e1e30] text-xs text-slate-500">
+              <th className="text-left px-4 py-3">Name</th>
+              <th className="text-left px-4 py-3">Email</th>
+              <th className="text-left px-4 py-3">Current Role</th>
+              <th className="text-left px-4 py-3">Exp</th>
+              <th className="text-left px-4 py-3">Profile</th>
+              <th className="text-left px-4 py-3">Your Job On Us</th>
+              <th className="text-left px-4 py-3">Joined</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.candidates.map(c => (
+              <tr key={c.id} className="border-b border-[#1a1a28] hover:bg-[#1a1a2e] transition-colors">
+                <td className="px-4 py-3 text-white font-medium">{c.name}</td>
+                <td className="px-4 py-3 text-slate-400 text-xs">{c.email}</td>
+                <td className="px-4 py-3 text-slate-300 text-xs">{c.current_job_title}</td>
+                <td className="px-4 py-3 text-slate-400 text-xs">
+                  {c.years_experience != null ? `${c.years_experience}y` : "—"}
+                </td>
+                <td className="px-4 py-3">
+                  {c.has_profile ? (
+                    <span className="text-xs text-green-400">Yes</span>
+                  ) : (
+                    <span className="text-xs text-slate-600">No</span>
+                  )}
+                </td>
+                <td className="px-4 py-3">
+                  {c.autopilot_on ? (
+                    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-400">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                      ON
+                    </span>
+                  ) : (
+                    <span className="text-xs text-slate-600">OFF</span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-slate-500 text-xs">
+                  {c.joined ? new Date(c.joined).toLocaleDateString() : "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {data.candidates.length === 0 && (
+          <p className="text-slate-500 text-sm text-center py-8">No candidates yet.</p>
+        )}
       </div>
     </div>
   );
