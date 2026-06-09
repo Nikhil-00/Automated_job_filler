@@ -15,7 +15,6 @@ const APP_NAV = [
   { label: "Jobs",         path: "/dashboard"    },
   { label: "Applications", path: "/applications" },
   { label: "Shortlisted",  path: "/shortlisted"  },
-  { label: "Profile",      path: "/profile"      },
 ];
 
 const Navbar = ({
