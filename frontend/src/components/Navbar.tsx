@@ -12,9 +12,10 @@ interface NavbarProps {
 const steps = ["Onboarding", "Profile", "Apply"];
 
 const APP_NAV = [
-  { label: "Jobs",            path: "/dashboard"    },
-  { label: "My Applications", path: "/applications" },
-  { label: "Shortlisted",     path: "/shortlisted"  },
+  { label: "Jobs",         path: "/dashboard"    },
+  { label: "Applications", path: "/applications" },
+  { label: "Shortlisted",  path: "/shortlisted"  },
+  { label: "Profile",      path: "/profile"      },
 ];
 
 const Navbar = ({

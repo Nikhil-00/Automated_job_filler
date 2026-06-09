@@ -12,7 +12,7 @@ const INFO_CARDS = [
     icon:    UserSearch,
     title:   "For Recruiters",
     desc:    "AI helps recruiters find the most relevant candidates quickly.",
-    pos:     "top-6 left-[8%]",
+    pos:     "top-4 left-[3%]",
     iconBg:  "bg-violet-100",
     iconCls: "text-violet-600",
     delay:   0.5,
@@ -21,7 +21,7 @@ const INFO_CARDS = [
     icon:    Users,
     title:   "For Job Seekers",
     desc:    "AI helps job seekers discover the best opportunities.",
-    pos:     "top-6 right-[4%]",
+    pos:     "top-4 right-[3%]",
     iconBg:  "bg-blue-100",
     iconCls: "text-blue-600",
     delay:   0.65,
@@ -101,7 +101,7 @@ const Landing = () => {
                          px-4 sm:px-6 py-2.5 rounded-lg hover:bg-primary/90 transition"
               style={{ boxShadow: "0 2px 8px 0 hsl(221 83% 53% / 0.35)" }}
             >
-              Sign Up Free
+              Sign Up
             </button>
           </div>
         </div>
@@ -183,7 +183,7 @@ const Landing = () => {
           initial={{ opacity: 0, x: 24 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.55, delay: 0.1 }}
-          className="relative h-[560px]"
+          className="relative h-[400px] sm:h-[480px] lg:h-[560px]"
         >
           {/* Hero photo — save your image as /public/hero.jpg */}
           <div className="absolute inset-0 rounded-3xl overflow-hidden
@@ -243,7 +243,7 @@ const Landing = () => {
               initial={{ opacity: 0, y: -12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: card.delay }}
-              className={`absolute z-20 bg-white rounded-2xl p-3.5 w-48 ${card.pos}`}
+              className={`absolute z-20 bg-white rounded-2xl p-3 w-36 sm:w-44 lg:w-48 ${card.pos}`}
               style={{ boxShadow: "0 4px 20px 0 rgb(0 0 0 / 0.1)" }}
             >
               <div className="flex items-start gap-2.5">

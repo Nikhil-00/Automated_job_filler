@@ -623,19 +623,19 @@ function CandidatesTab({ token, authH }: { token: string; authH: Record<string, 
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                    <div className="flex items-center gap-1 shrink-0 flex-nowrap">
                       <button
                         onClick={() => openChat(a)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-violet-500/10 border border-violet-500/30 text-violet-400 hover:bg-violet-500/20 transition"
+                        className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold bg-violet-500/10 border border-violet-500/30 text-violet-400 hover:bg-violet-500/20 transition whitespace-nowrap"
                         title="Ask AI about this candidate"
                       >
-                        <MessageSquare className="w-3.5 h-3.5" /> Ask AI
+                        <MessageSquare className="w-3 h-3 shrink-0" /> Ask AI
                       </button>
 
                       <button
                         onClick={() => downloadCV(a.user_id, `${a.first_name}_${a.last_name}`)}
                         disabled={!a.has_cv || downloading === a.user_id}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition
+                        className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold transition whitespace-nowrap
                           ${a.has_cv
                             ? "bg-primary/20 border border-primary/40 text-primary hover:bg-primary/30"
                             : "bg-muted border border-border text-muted-foreground opacity-40 cursor-not-allowed"
@@ -643,41 +643,41 @@ function CandidatesTab({ token, authH }: { token: string; authH: Record<string, 
                         title={a.has_cv ? "Download CV" : "No CV uploaded"}
                       >
                         {downloading === a.user_id
-                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          : <Download className="w-3.5 h-3.5" />
+                          ? <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+                          : <Download className="w-3 h-3 shrink-0" />
                         }
-                        {a.has_cv ? "CV" : "No CV"}
+                        CV
                       </button>
 
                       {a.status === "shortlisted" ? (
-                        <span className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-500/10 border border-green-500/30 text-green-400">
-                          <CheckCircle className="w-3.5 h-3.5" /> Shortlisted
+                        <span className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold bg-green-500/10 border border-green-500/30 text-green-400 whitespace-nowrap">
+                          <CheckCircle className="w-3 h-3 shrink-0" /> Shortlisted
                         </span>
                       ) : a.status === "rejected" ? (
-                        <span className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-500/10 border border-red-500/30 text-red-400">
-                          <XCircle className="w-3.5 h-3.5" /> Rejected
+                        <span className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold bg-red-500/10 border border-red-500/30 text-red-400 whitespace-nowrap">
+                          <XCircle className="w-3 h-3 shrink-0" /> Rejected
                         </span>
                       ) : (
                         <>
                           <button
                             onClick={() => handleAction(a.application_id, "shortlist", a)}
                             disabled={actioning === a.application_id}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-500/10 border border-green-500/30 text-green-400 hover:bg-green-500/20 transition disabled:opacity-50"
+                            className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold bg-green-500/10 border border-green-500/30 text-green-400 hover:bg-green-500/20 transition disabled:opacity-50 whitespace-nowrap"
                           >
                             {actioning === a.application_id
-                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              : <CheckCircle className="w-3.5 h-3.5" />
+                              ? <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+                              : <CheckCircle className="w-3 h-3 shrink-0" />
                             }
                             Shortlist
                           </button>
                           <button
                             onClick={() => handleAction(a.application_id, "reject", a)}
                             disabled={actioning === a.application_id}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition disabled:opacity-50"
+                            className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition disabled:opacity-50 whitespace-nowrap"
                           >
                             {actioning === a.application_id
-                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              : <XCircle className="w-3.5 h-3.5" />
+                              ? <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+                              : <XCircle className="w-3 h-3 shrink-0" />
                             }
                             Reject
                           </button>
